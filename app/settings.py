@@ -37,10 +37,10 @@ FIELDS = [
     ("tunnel", "wg_endpoint", "WG: адрес VPS (IP:порт)", "str", "", "заполнится автонастройкой; или вручную 1.2.3.4:51820"),
     ("tunnel", "wg_server_pubkey", "WG: публичный ключ VPS", "str", "", "заполнится автонастройкой; или содержимое server.pub"),
     ("tunnel", "wg_server_addr", "WG: адрес VPS в туннеле", "str", "10.8.0.1", ""),
-    ("tunnel", "wg_client_addr", "WG: адрес мини-ПК в туннеле", "str", "10.8.0.2", ""),
+    ("tunnel", "wg_client_addr", "WG: адрес чекера в туннеле", "str", "10.8.0.2", ""),
     ("tunnel", "wg_keepalive", "WG: PersistentKeepalive, с", "int", 25, "обязателен за NAT провайдера"),
-    ("tunnel", "wg_client_privkey", "WG: приватный ключ мини-ПК", "secret", "", "генерируется автоматически"),
-    ("tunnel", "wg_client_pubkey", "WG: публичный ключ мини-ПК", "str", "", ""),
+    ("tunnel", "wg_client_privkey", "WG: приватный ключ чекера", "secret", "", "генерируется автоматически"),
+    ("tunnel", "wg_client_pubkey", "WG: публичный ключ чекера", "str", "", ""),
     # --- исходящий VPS ---
     ("egress", "egress_type", "Тип", "str", "none", "none | ssh | socks5 | http"),
     ("egress", "egress_host", "Хост", "str", "", ""),
@@ -64,7 +64,7 @@ FIELDS = [
 SECTIONS = [
     ("scheduler", "Планировщик"),
     ("sources", "Источники нод"),
-    ("tunnel", "Туннель мини-ПК ↔ VPS"),
+    ("tunnel", "Туннель чекер ↔ VPS"),
     ("egress", "Исходящий VPS"),
     ("export", "Экспорт статусов"),
     ("access", "Доступ"),

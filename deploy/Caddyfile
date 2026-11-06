@@ -1,13 +1,15 @@
-# /etc/caddy/Caddyfile на VPS. Обе записи DNS (A) указывают на IP VPS.
-# 10.8.0.2 — адрес мини-ПК в WireGuard-туннеле.
+# /etc/caddy/Caddyfile на VPS. Обе A-записи DNS указывают на IP VPS.
+# Режим SSH-туннеля: чекер пробрасывает на VPS порты 18000 (приложение) и 17681 (терминал)
+# на 127.0.0.1 («SSH: адрес на VPS для пробросов» = 127.0.0.1).
+# Режим WireGuard: замените 127.0.0.1:18000 → 10.8.0.2:8000 и 127.0.0.1:17681 → 10.8.0.2:7681.
 
 admin.example.com {
     handle /ttyd/* {
-        reverse_proxy 10.8.0.2:7681
+        reverse_proxy 127.0.0.1:17681
     }
-    reverse_proxy 10.8.0.2:8000
+    reverse_proxy 127.0.0.1:18000
 }
 
 status.example.com {
-    reverse_proxy 10.8.0.2:8000
+    reverse_proxy 127.0.0.1:18000
 }

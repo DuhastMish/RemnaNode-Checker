@@ -92,7 +92,7 @@
   </form>
 
   {% if sid == 'tunnel' and values.tunnel_mode == 'wireguard' %}
-    <h2 style="margin-top:20px">Публичный ключ мини-ПК</h2>
+    <h2 style="margin-top:20px">Публичный ключ чекера</h2>
     <pre>{{ client_pubkey }}</pre>
     <h2>Блок для /etc/wireguard/wg0.conf на VPS (только для ручного способа)</h2>
     <pre>{{ peer_block }}</pre>

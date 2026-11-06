@@ -1,6 +1,6 @@
 # Шаблон для nginx на VPS (например, conf.d/nodecheck.conf).
 # 172.18.0.1 — gateway docker-сети, в которой работает nginx: так nginx в контейнере видит порты,
-# которые ssh -R с мини-ПК открыл на хосте VPS.
+# которые ssh -R с чекера открыл на хосте VPS.
 server {
     listen 80;
     server_name admin.example.com status.example.com;
