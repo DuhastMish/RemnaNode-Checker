@@ -1,0 +1,12 @@
+# Чекер на отдельной машине:  PANEL_URL=… CHECKER_TOKEN=… docker compose -f agent/compose.yml up -d --build
+# Токен — из панели, раздел «Чекеры» → «Добавить».
+services:
+  agent:
+    build: .
+    container_name: nodecheck-agent
+    restart: unless-stopped
+    environment:
+      PANEL_URL: ${PANEL_URL:?set PANEL_URL}
+      CHECKER_TOKEN: ${CHECKER_TOKEN:?set CHECKER_TOKEN}
+    # на одной машине с панелью: PANEL_URL=http://127.0.0.1:8000 и раскомментировать
+    # network_mode: host

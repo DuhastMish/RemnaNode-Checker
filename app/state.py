@@ -1,0 +1,148 @@
+"""Приём результатов чекеров и состояние нод.
+
+Результат одного чекера: green / yellow / red. Негативный — всё, что не green.
+Чекер считает ноду упавшей после двух негативных подряд (fail_streak >= 2), один green сбрасывает счётчик.
+Агрегат (цвет плитки) по живым (online) чекерам со свежим результатом:
+  нет свежих результатов           → grey
+  никто не считает упавшей         → green
+  часть считает упавшей            → orange
+  все считают упавшей              → red
+Результат по устаревшей ревизии / не тому адресу сохраняется (stale=1), но в состоянии не учитывается.
+"""
+
+import threading
+import time
+
+from . import checkers, db, settings
+
+FAIL_THRESHOLD = 2
+_lock = threading.Lock()
+
+
+def _int(v):
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
+
+
+def _fresh_after(now):
+    return now - 3 * settings.get("check_interval_min") * 60
+
+
+def ingest(checker_id, items):
+    """Записать батч результатов. Возвращает (принято, дубли, устаревшие)."""
+    accepted = dupes = stale_n = 0
+    touched = set()
+    with _lock:
+        for it in items:
+            node_id = it.get("node_id") if isinstance(it.get("node_id"), str) else None
+            node = db.q1("SELECT id, address, rev FROM nodes WHERE id=?", (node_id,)) if node_id else None
+            if node_id and not node:
+                node_id = None  # цели уже нет — сохраняем как разовый результат
+            stale = 0
+            if node and (it.get("node_rev") != node["rev"] or it.get("target_address") != node["address"]):
+                stale = 1
+            ts = min(_int(it.get("ts")) or int(time.time()), int(time.time()) + 60)
+            ssh = it.get("ssh") if isinstance(it.get("ssh"), dict) else {}
+            proxy = it.get("proxy") if isinstance(it.get("proxy"), dict) else {}
+            state = it.get("state") if it.get("state") in ("green", "yellow", "red") else "red"
+            c = db.conn()
+            cur = c.execute(
+                "INSERT OR IGNORE INTO results(result_uid, node_id, checker_id, job_id, ts, node_rev, target_address, "
+                "target_port, ssh_status, ssh_ok, proxy_status, proxy_ok, latency_ms, state, stale) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    str(it.get("result_uid") or "")[:64] or None,
+                    node_id,
+                    checker_id,
+                    _int(it.get("job_id")),
+                    ts,
+                    _int(it.get("node_rev")),
+                    str(it.get("target_address") or "")[:253],
+                    _int(it.get("target_port")),
+                    str(ssh.get("status") or "")[:80],
+                    1 if ssh.get("ok") else 0,
+                    str(proxy.get("status") or "")[:80],
+                    None if proxy.get("ok") is None else (1 if proxy.get("ok") else 0),
+                    _int(proxy.get("latency_ms")),
+                    state,
+                    stale,
+                ),
+            )
+            c.commit()
+            if cur.rowcount == 0:
+                dupes += 1
+                continue
+            accepted += 1
+            if stale:
+                stale_n += 1
+                continue
+            if node:
+                _update_checker_state(node_id, checker_id, state, ts)
+                touched.add(node_id)
+    for node_id in touched:
+        recompute(node_id)
+    return accepted, dupes, stale_n
+
+
+def _update_checker_state(node_id, checker_id, state, ts):
+    row = db.q1("SELECT * FROM node_checker_state WHERE node_id=? AND checker_id=?", (node_id, checker_id))
+    if row and row["last_ts"] and ts < row["last_ts"]:
+        return  # пришёл старее уже учтённого
+    streak = 0 if state == "green" else ((row["fail_streak"] if row else 0) + 1)
+    db.x(
+        "INSERT INTO node_checker_state(node_id, checker_id, last_state, fail_streak, last_ts) VALUES(?,?,?,?,?) "
+        "ON CONFLICT(node_id, checker_id) DO UPDATE SET last_state=excluded.last_state, "
+        "fail_streak=excluded.fail_streak, last_ts=excluded.last_ts",
+        (node_id, checker_id, state, streak, ts),
+    )
+
+
+def aggregate(node_id, online=None, now=None):
+    """(color, up_count, down_count, last_ts) по живым чекерам со свежими результатами."""
+    now = now or time.time()
+    online = set(checkers.online_ids() if online is None else online)
+    fresh = _fresh_after(now)
+    up = down = 0
+    last_ts = None
+    for r in db.q("SELECT * FROM node_checker_state WHERE node_id=?", (node_id,)):
+        last_ts = max(last_ts or 0, r["last_ts"] or 0) or None
+        if r["checker_id"] not in online or not r["last_ts"] or r["last_ts"] < fresh:
+            continue
+        if r["fail_streak"] >= FAIL_THRESHOLD:
+            down += 1
+        else:
+            up += 1
+    if up + down == 0:
+        color = "grey"
+    elif down == 0:
+        color = "green"
+    elif up == 0:
+        color = "red"
+    else:
+        color = "orange"
+    return color, up, down, last_ts
+
+
+def recompute(node_id, online=None, now=None):
+    """Пересчитать агрегат ноды. Возвращает (old_color, new_color).
+
+    node_state.updated_at — время последнего результата (для «проверена N мин назад»).
+    """
+    color, up, down, last_ts = aggregate(node_id, online, now)
+    with _lock:
+        row = db.q1("SELECT color FROM node_state WHERE node_id=?", (node_id,))
+        old = row["color"] if row else "grey"
+        db.x(
+            "INSERT INTO node_state(node_id, color, up_count, down_count, updated_at) VALUES(?,?,?,?,?) "
+            "ON CONFLICT(node_id) DO UPDATE SET color=excluded.color, up_count=excluded.up_count, "
+            "down_count=excluded.down_count, updated_at=excluded.updated_at",
+            (node_id, color, up, down, last_ts),
+        )
+    return old, color
+
+
+def recompute_all():
+    """Периодически: чекеры уходят в offline, результаты устаревают — цвет должен это отражать."""
+    online = checkers.online_ids()
+    now = time.time()
+    for r in db.q("SELECT id FROM nodes"):
+        recompute(r["id"], online, now)

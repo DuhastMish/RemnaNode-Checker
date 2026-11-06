@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+{% if new_token %}
+<div class="card" style="border-color:var(--accent)">
+  <h2>Токен чекера «{{ new_name }}»</h2>
+  <p class="bad">Показывается один раз — скопируй сейчас. В панели хранится только его хэш.</p>
+  <pre>{{ new_token }}</pre>
+  <h2>Запуск на машине чекера</h2>
+  <p class="muted">Образ собирается из папки <code>agent/</code> репозитория:
+    <code>docker build -t {{ image }} agent/</code></p>
+  <pre>docker run -d --name nodecheck-agent --restart unless-stopped \
+  -e PANEL_URL={{ panel_url }} \
+  -e CHECKER_TOKEN={{ new_token }} \
+  {{ image }}</pre>
+  <p class="muted">или фрагмент для <code>docker-compose.yml</code>:</p>
+  <pre>services:
+  agent:
+    build: ./agent
+    container_name: nodecheck-agent
+    restart: unless-stopped
+    environment:
+      PANEL_URL: {{ panel_url }}
+      CHECKER_TOKEN: {{ new_token }}</pre>
+  <p class="muted">Чекер на одной машине с панелью: <code>PANEL_URL=http://127.0.0.1:8000</code> и <code>--network host</code>.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Чекеры</h2>
+  <table>
+    <tr><th>Имя</th><th>Статус</th><th>Последний heartbeat</th><th>Версия</th><th>Внешний IP</th><th></th></tr>
+    {% for c in checkers %}
+    <tr>
+      <td>{{ c.name }}<br><span class="muted" style="font-size:12px">{{ c.id }}</span></td>
+      <td>
+        {% if not c.enabled %}<span class="muted">отключён</span>
+        {% elif c.is_online %}<span class="ok">online</span>
+        {% else %}<span class="bad">offline</span>{% endif %}
+      </td>
+      <td>{{ c.last_seen_at|ago }}</td>
+      <td>{{ c.version or '—' }}</td>
+      <td><code>{{ c.public_ip or '—' }}</code></td>
+      <td>
+        <div class="actions" style="margin:0">
+          {% if c.enabled %}
+          <form method="post" action="/checkers/{{ c.id }}/disable"><button type="submit" class="secondary">Отключить</button></form>
+          {% else %}
+          <form method="post" action="/checkers/{{ c.id }}/enable"><button type="submit" class="secondary">Включить</button></form>
+          {% endif %}
+          <form method="post" action="/checkers/{{ c.id }}/token" onsubmit="return confirm('Старый токен перестанет работать. Перевыпустить?')"><button type="submit" class="secondary">Перевыпустить токен</button></form>
+          <form method="post" action="/checkers/{{ c.id }}/delete" onsubmit="return confirm('Удалить чекер «{{ c.name }}»? Его результаты в истории останутся.')"><button type="submit" class="danger">Удалить</button></form>
+        </div>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">Чекеров пока нет. Пока нет ни одного online-чекера, ноды не проверяются.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h2>Добавить чекер</h2>
+  <form method="post" action="/checkers" style="display:flex;gap:8px">
+    <input name="name" placeholder="например, Дом · провайдер 1" required maxlength="60">
+    <button type="submit" style="white-space:nowrap">Добавить</button>
+  </form>
+  <p class="muted">Чекер ставится на доверенную машину: он получает адреса нод (без имён и источников).
+    Ноды проверяются из сети этой машины.</p>
+</div>
+{% endblock %}
