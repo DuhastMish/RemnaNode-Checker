@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    container_name: nodecheck
+    network_mode: host          # wg0 поднимается в сетевом пространстве хоста
+    cap_add: [NET_ADMIN]
+    env_file: .env
+    volumes:
+      - ./data:/data
+      - ./wireguard:/etc/wireguard
+    restart: unless-stopped
+
+  ttyd:
+    build: .
+    container_name: nodecheck-ttyd
+    network_mode: host
+    # TTYD_IFACE=lo  — режим SSH-туннеля: ttyd слушает 127.0.0.1, наружу уходит через ssh -R
+    # TTYD_IFACE=wg0 — режим WireGuard: слушает только на туннельном интерфейсе
+    # Внутри открывает ssh на сам мини-ПК (127.0.0.1 = хост, т.к. network_mode: host).
+    command: >
+      ttyd -p 7681 -i ${TTYD_IFACE:-lo} -b /ttyd -W
+      ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${TTYD_USER:?set TTYD_USER in .env}@127.0.0.1
+    depends_on: [app]
+    restart: unless-stopped

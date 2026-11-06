@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }} · nodecheck</title>
+{% if refresh %}<meta http-equiv="refresh" content="{{ refresh }}">{% endif %}
+<style>
+:root{--bg:#0f1115;--card:#181b22;--border:#2a2f3a;--text:#e6e8ee;--muted:#8b93a7;--accent:#4f8cff;
+--green:#2ecc71;--yellow:#f1c40f;--red:#e74c3c;--grey:#555b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+a{color:var(--accent);text-decoration:none}
+header{display:flex;align-items:center;gap:20px;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--card)}
+header .brand{font-weight:600;color:var(--text)}
+header nav a{margin-right:14px;color:var(--muted)}
+header nav a.active,header nav a:hover{color:var(--text)}
+header .right{margin-left:auto;color:var(--muted);font-size:13px}
+main{max-width:1200px;margin:0 auto;padding:20px}
+.flash{background:#1f2a3d;border:1px solid #2e4470;padding:10px 14px;border-radius:8px;margin-bottom:16px}
+.tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.tabs a{padding:8px 14px;border:1px solid var(--border);border-radius:8px;color:var(--muted);background:var(--card)}
+.tabs a.active{color:var(--text);border-color:var(--accent)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.dot.green{background:var(--green)}.dot.yellow{background:var(--yellow)}.dot.red{background:var(--red)}.dot.grey{background:var(--grey)}
+.summary{display:flex;gap:16px;align-items:center;margin-bottom:16px;color:var(--muted);font-size:14px;flex-wrap:wrap}
+.summary form{margin-left:auto;display:flex;gap:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.tile{display:block;background:var(--card);border:1px solid var(--border);border-left:5px solid var(--grey);border-radius:8px;padding:10px 12px;color:var(--text)}
+.tile.green{border-left-color:var(--green)}.tile.yellow{border-left-color:var(--yellow)}.tile.red{border-left-color:var(--red)}
+.tile .name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .sub{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .flags{color:var(--yellow);font-size:12px}
+button,.btn{background:var(--accent);color:#fff;border:0;border-radius:6px;padding:7px 14px;font:inherit;cursor:pointer}
+button.secondary,.btn.secondary{background:var(--card);border:1px solid var(--border);color:var(--text)}
+button.danger{background:var(--red)}
+input,select,textarea{background:#0f1115;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font:inherit;width:100%}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--muted);font-weight:500}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+pre{background:#0f1115;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.card h2{margin:0 0 12px;font-size:17px}
+.row{display:grid;grid-template-columns:260px 1fr;gap:10px;align-items:center;margin-bottom:10px}
+.row label{color:var(--muted);font-size:14px}
+.row small{display:block;color:var(--muted);font-size:12px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.actions form{display:inline}
+.muted{color:var(--muted)}
+.ok{color:var(--green)}.bad{color:var(--red)}
+.progress{height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin:10px 0}
+.progress div{height:100%;background:var(--accent);width:0;transition:width .3s}
+@media (max-width:700px){.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="/">nodecheck</a>
+  <nav>
+  {% if mode == 'admin' %}
+    <a href="/" class="{{ 'active' if title == 'Ноды' }}">Ноды</a>
+    <a href="/terminal" class="{{ 'active' if title == 'Терминал' }}">Терминал</a>
+    <a href="/settings" class="{{ 'active' if title == 'Настройки' }}">Настройки</a>
+  {% else %}
+    <a href="/" class="{{ 'active' if title == 'Статус' }}">Статус</a>
+    <a href="/check" class="{{ 'active' if title == 'Проверить' }}">Проверить</a>
+  {% endif %}
+  </nav>
+  <span class="right"><a href="/logout">выйти</a></span>
+</header>
+<main>
+{% if msg %}<div class="flash">{{ msg }}</div>{% endif %}
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

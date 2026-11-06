@@ -1,0 +1,7 @@
+# /etc/wireguard/wg0.conf на VPS
+[Interface]
+Address = 10.8.0.1/24
+ListenPort = 51820
+PrivateKey = <server.key>
+
+# Блок [Peer] для мини-ПК скопируй из admin → Настройки → Туннель

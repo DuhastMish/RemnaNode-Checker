@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="tabs">
+  {% for t in tabs %}
+  <a href="/?project={{ t.key }}" class="{{ 'active' if t.key == project }}">
+    {{ t.label }}
+    <span class="muted">{{ t.counts.total }}</span>
+    <span class="dot green"></span>{{ t.counts.green }}
+    <span class="dot yellow"></span>{{ t.counts.yellow }}
+    <span class="dot red"></span>{{ t.counts.red }}
+  </a>
+  {% endfor %}
+</div>
+
+<div class="summary">
+  <span><span class="dot green"></span>работает</span>
+  <span><span class="dot yellow"></span>жив, прокси нет (ТСПУ / squid)</span>
+  <span><span class="dot red"></span>недоступен</span>
+  <span><span class="dot grey"></span>нет свежих данных</span>
+  {% if running.active %}
+    <span class="muted">идёт проверка: {{ running.done }}/{{ running.total }}</span>
+  {% endif %}
+  <form method="post" action="/check">
+    <input type="hidden" name="project" value="{{ project }}">
+    <input type="text" name="target" placeholder="домен, IP или IP:порт" style="width:200px">
+    <button type="submit">Проверить</button>
+  </form>
+  <form method="post" action="/sync"><button type="submit" class="secondary" title="{{ last_sync.msg }}">Обновить список</button></form>
+</div>
+
+{% if not rows %}
+<p class="muted">Нод нет. Заполни токены в <a href="/settings#sources">настройках</a> и нажми «Обновить список».
+  {% if last_sync.msg %}<br>Последняя синхронизация: {{ last_sync.msg }}{% endif %}</p>
+{% endif %}
+
+<div class="grid">
+{% for r in rows %}
+  <a class="tile {{ r.color }}" href="/node/{{ r.ip }}">
+    <div class="name">{{ r.name or '—' }}</div>
+    <div class="sub"><code>{{ r.ip }}</code>{% if r.fresh_port %} :{{ r.fresh_port }}{% endif %}</div>
+    <div class="sub">{{ r.ssh_status or '' }} {{ r.proxy_status or '' }}</div>
+    <div class="sub">{{ r.checked_at|ago }}{% if not r.is_active %} · неактивна{% endif %}</div>
+    {% if r.flags %}<div class="flags">{{ r.flags }}</div>{% endif %}
+  </a>
+{% endfor %}
+</div>
+{% endblock %}

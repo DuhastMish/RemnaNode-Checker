@@ -1,0 +1,13 @@
+# /etc/caddy/Caddyfile на VPS. Обе записи DNS (A) указывают на IP VPS.
+# 10.8.0.2 — адрес мини-ПК в WireGuard-туннеле.
+
+admin.example.com {
+    handle /ttyd/* {
+        reverse_proxy 10.8.0.2:7681
+    }
+    reverse_proxy 10.8.0.2:8000
+}
+
+status.example.com {
+    reverse_proxy 10.8.0.2:8000
+}

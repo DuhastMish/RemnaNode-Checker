@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+.verdict{padding:14px 16px;border-radius:10px;margin-bottom:14px;background:#0f1115;border:1px solid var(--border)}
+.verdict .big{font-size:24px;font-weight:600}
+.verdict .big .dot{width:16px;height:16px;margin-right:10px}
+.verdict.green .big{color:var(--green)}.verdict.red .big{color:var(--red)}.verdict.yellow .big{color:var(--yellow)}
+</style>
+<div class="card">
+  <h2>Проверить сервер с домашнего интернета</h2>
+  <form method="post" action="/check" style="display:flex;gap:8px;flex-wrap:wrap">
+    <input type="text" name="target" list="nodes" placeholder="домен, IP или IP:порт" required autofocus style="flex:1;min-width:240px" value="{{ request.query_params.get('t', '') }}">
+    <datalist id="nodes">{% for r in rows %}<option value="{{ r.ip }}">{{ r.project }} · {{ r.name }}</option>{% endfor %}</datalist>
+    <button type="submit">Проверить</button>
+  </form>
+  <p class="muted" style="margin:8px 0 0">SSH-проба на 22 порт; если указан <code>IP:порт</code> — дополнительно проба через прокси на этом порту. Не чаще 5 раз в минуту.</p>
+</div>
+{% if job_id %}
+<div class="card">
+  <h2>Результат <span class="muted" id="st">…</span></h2>
+  <div id="verdicts"></div>
+  <table id="tbl"><tr><th></th><th>Сервер</th><th>IP</th><th>Статус</th><th>SSH</th><th>Прокси</th></tr></table>
+</div>
+<script>
+const job = {{ job_id|int }};
+const L = {{ COLOR_LABEL|tojson }};
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+async function tick(){
+  const r = await fetch('/check/json?job='+job); if(!r.ok) return;
+  const j = await r.json();
+  document.getElementById('st').textContent = j.status==='done' ? 'готово' : 'проверяю…';
+  const t = document.getElementById('tbl'); while(t.rows.length>1) t.deleteRow(1);
+  const v = document.getElementById('verdicts'); v.innerHTML='';
+  for(const x of j.results){
+    v.innerHTML += '<div class="verdict '+esc(x.state)+'"><div class="big"><span class="dot '+esc(x.state)+'"></span>'+esc(x.verdict)+'</div></div>'; const tr=t.insertRow(); tr.innerHTML='<td><span class="dot '+esc(x.state)+'"></span></td><td>'+esc(x.name)+'</td><td><code>'+esc(x.ip)+'</code></td><td>'+esc(L[x.state]||x.state)+'</td><td>'+esc(x.ssh)+'</td><td>'+esc(x.proxy||'—')+'</td>'; }
+  if(j.status!=='done') setTimeout(tick, 2000);
+}
+tick();
+</script>
+{% endif %}
+{% endblock %}

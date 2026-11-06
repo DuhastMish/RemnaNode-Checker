@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вход · nodecheck</title>
+<style>
+body{margin:0;background:#0f1115;color:#e6e8ee;font:15px system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
+form{background:#181b22;border:1px solid #2a2f3a;border-radius:12px;padding:28px;width:320px}
+h1{font-size:18px;margin:0 0 16px}
+input{width:100%;box-sizing:border-box;background:#0f1115;color:#e6e8ee;border:1px solid #2a2f3a;border-radius:6px;padding:9px 10px;font:inherit;margin-bottom:12px}
+button{width:100%;background:#4f8cff;color:#fff;border:0;border-radius:6px;padding:9px;font:inherit;cursor:pointer}
+.err{color:#e74c3c;margin-bottom:10px;font-size:14px}
+</style></head><body>
+<form method="post" action="/login">
+  <h1>{{ 'PIN' if mode == 'status' else 'Admin-токен' }}</h1>
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+  <input type="password" name="credential" autofocus autocomplete="current-password"
+         {% if mode == 'status' %}inputmode="numeric"{% endif %}>
+  <input type="hidden" name="next" value="{{ request.query_params.get('next', '/') }}">
+  <button type="submit">Войти</button>
+</form>
+</body></html>

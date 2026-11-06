@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>{{ node.name or '—' }} <code>{{ node.ip }}</code></h2>
+  <div class="muted">проект: {{ node.project }}{% if node.fresh_port %} · порт прокси {{ node.fresh_port }}{% endif %}
+    {% if node.flags %} · {{ node.flags }}{% endif %} · {{ 'активна' if node.is_active else 'неактивна' }}
+    · обновлена {{ node.updated_at|ago }}</div>
+  <div class="actions">
+    <form method="post" action="/check"><input type="hidden" name="ips" value="{{ node.ip }}"><button type="submit">Проверить сейчас</button></form>
+    <a class="btn secondary" href="/">← к списку</a>
+  </div>
+</div>
+<div class="card">
+  <h2>История (последние {{ hist|length }})</h2>
+  <table>
+    <tr><th></th><th>Время</th><th>SSH</th><th>Прокси</th><th>Задержка</th><th>Точка</th><th>Задание</th></tr>
+    {% for h in hist %}
+    <tr>
+      <td><span class="dot {{ h.state }}"></span></td>
+      <td>{{ h.ts|dt }} <span class="muted">({{ h.ts|ago }})</span></td>
+      <td>{{ h.ssh_status }}</td>
+      <td>{{ h.proxy_status or '—' }}</td>
+      <td>{% if h.latency_ms is not none %}{{ h.latency_ms }} мс{% else %}—{% endif %}</td>
+      <td class="muted">{{ h.vantage }}</td>
+      <td>{% if h.job_id %}<a href="/jobs/{{ h.job_id }}">#{{ h.job_id }}</a>{% else %}<span class="muted">план</span>{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">Проверок ещё не было</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

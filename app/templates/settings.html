@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block content %}
+{% macro field(s, key, label, typ, default, help) %}
+<div class="row">
+  <label for="{{ key }}">{{ label }}{% if help %}<small>{{ help }}</small>{% endif %}</label>
+  {% if typ == 'bool' %}
+    <input type="checkbox" id="{{ key }}" name="{{ key }}" style="width:auto" {{ 'checked' if values[key] }}>
+  {% elif typ == 'secret' %}
+    <input type="password" id="{{ key }}" name="{{ key }}" placeholder="••••••••  (пусто — не менять)" autocomplete="new-password">
+  {% elif key == 'tunnel_mode' %}
+    <select id="{{ key }}" name="{{ key }}">
+      {% for o in ('ssh','wireguard') %}<option value="{{ o }}" {{ 'selected' if values[key]==o }}>{{ o }}</option>{% endfor %}
+    </select>
+  {% elif key == 'egress_type' %}
+    <select id="{{ key }}" name="{{ key }}">
+      {% for o in ('none','ssh','socks5','http') %}<option value="{{ o }}" {{ 'selected' if values[key]==o }}>{{ o }}</option>{% endfor %}
+    </select>
+  {% else %}
+    <input type="{{ 'number' if typ == 'int' else 'text' }}" id="{{ key }}" name="{{ key }}" value="{{ values[key] }}">
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% for sid, stitle in sections %}
+<div class="card" id="{{ sid }}">
+  <h2>{{ stitle }}</h2>
+
+  {% if sid == 'tunnel' %}
+    {% if tunnel.mode == 'ssh' %}
+    <p>Режим <b>SSH</b> · состояние:
+      {% if tunnel.up %}<span class="ok">туннель активен</span> (с {{ tunnel.since|ago }}{% if tunnel.restarts %}, перезапусков: {{ tunnel.restarts }}{% endif %})
+      {% elif values.wg_vps_host %}<span class="bad">туннель не запущен</span>
+      {% else %}<span class="muted">не настроен</span>{% endif %}
+    </p>
+    {% if tunnel.log %}<pre style="max-height:120px">{{ tunnel.log|join('\n') }}</pre>{% endif %}
+    {% else %}
+    <p>Режим <b>WireGuard</b> · состояние:
+      {% if tunnel.up %}<span class="ok">интерфейс поднят</span>{% else %}<span class="bad">интерфейс не поднят</span>{% endif %}
+      {% for p in tunnel.peers %}
+        · handshake: {% if p.handshake_age is none %}<span class="bad">не было</span>
+          {% elif p.handshake_age < 180 %}<span class="ok">{{ p.handshake_age }} с назад</span>
+          {% else %}<span class="bad">{{ p.handshake_age }} с назад</span>{% endif %}
+        · endpoint {{ p.endpoint }} · ↓{{ p.rx|hbytes }} ↑{{ p.tx|hbytes }}
+      {% endfor %}
+    </p>
+    {% endif %}
+    {% if tunnel_provision.ts %}
+      <p class="{{ 'ok' if tunnel_provision.ok else ('muted' if tunnel_provision.busy else 'bad') }}">
+        Автонастройка VPS ({{ tunnel_provision.ts|ago }}): {{ tunnel_provision.msg }}</p>
+    {% endif %}
+    {% if tunnel_apply.ts %}
+      <p class="{{ 'ok' if tunnel_apply.ok else ('muted' if tunnel_apply.busy else 'bad') }}">
+        Последнее применение ({{ tunnel_apply.ts|ago }}): {{ tunnel_apply.msg }}</p>
+    {% endif %}
+    <p class="muted">Порядок: заполни IP/логин/пароль VPS → «Сохранить» → «Настроить VPS автоматически».
+      В режиме SSH приложение пробрасывает свои порты на VPS (<code>ssh -R</code>), nginx на VPS проксирует домены на эти порты.
+      Поля «WG: …» нужны только для режима WireGuard.</p>
+  {% endif %}
+
+  {% if sid == 'sources' and last_sync.ts %}
+    <p class="muted">Последняя синхронизация {{ last_sync.ts|ago }}: {{ last_sync.msg }}</p>
+  {% endif %}
+
+  {% if sid == 'egress' %}
+    <p>Состояние:
+      {% if egress_alive is none %}<span class="muted">выключено, запросы идут напрямую</span>
+      {% elif egress_alive %}<span class="ok">активен</span>
+      {% else %}<span class="bad">не подключён{% if egress_error %} — {{ egress_error }}{% endif %}</span>{% endif %}
+    </p>
+  {% endif %}
+
+  <form method="post" action="/settings">
+    <input type="hidden" name="section" value="{{ sid }}">
+    {% for s, key, label, typ, default, help in fields if s == sid and key != 'wg_client_pubkey' %}
+      {% if not (sid == 'tunnel' and values.tunnel_mode == 'ssh' and label.startswith('WG:')) and not (sid == 'tunnel' and values.tunnel_mode == 'wireguard' and label.startswith('SSH:')) %}
+      {{ field(s, key, label, typ, default, help) }}
+      {% endif %}
+    {% endfor %}
+    <div class="actions">
+      <button type="submit">Сохранить</button>
+      {% if sid == 'sources' %}<button type="submit" class="secondary" formaction="/settings/sources/test">Проверить подключение</button>{% endif %}
+      {% if sid == 'egress' %}<button type="submit" class="secondary" formaction="/settings/egress/test">Проверить (показать внешний IP)</button>{% endif %}
+      {% if sid == 'tunnel' %}
+        <button type="submit" formaction="/settings/tunnel/provision" onclick="return confirm('Зайти на VPS по SSH, поставить WireGuard и поднять туннель?')">Настроить VPS автоматически</button>
+        <button type="submit" class="secondary" formaction="/settings/tunnel/test">Проверить с VPS</button>
+        <button type="submit" class="secondary" formaction="/settings/tunnel/apply" onclick="return confirm('Перезапустить туннель с новыми параметрами?')">Применить (перезапустить туннель)</button>
+        {% if values.tunnel_mode == 'wireguard' %}
+        <button type="submit" class="danger" formaction="/settings/tunnel/genkey" onclick="return confirm('Старый ключ перестанет работать, нужно будет обновить [Peer] на VPS. Продолжить?')">Перегенерировать ключи</button>
+        {% endif %}
+      {% endif %}
+    </div>
+  </form>
+
+  {% if sid == 'tunnel' and values.tunnel_mode == 'wireguard' %}
+    <h2 style="margin-top:20px">Публичный ключ мини-ПК</h2>
+    <pre>{{ client_pubkey }}</pre>
+    <h2>Блок для /etc/wireguard/wg0.conf на VPS (только для ручного способа)</h2>
+    <pre>{{ peer_block }}</pre>
+    <p class="muted">Вставь на VPS, затем <code>wg syncconf wg0 &lt;(wg-quick strip wg0)</code> или <code>systemctl restart wg-quick@wg0</code>. После этого — «Применить» здесь.</p>
+  {% endif %}
+
+  {% if sid == 'scheduler' %}
+    <h2 style="margin-top:20px">Задачи</h2>
+    <table>
+      <tr><th>Задача</th><th>Последний запуск</th><th>Следующий</th><th></th></tr>
+      {% for t in tasks %}
+      <tr>
+        <td>{{ t.label }}{% if t.error %}<br><span class="bad">{{ t.error }}</span>{% endif %}</td>
+        <td>{{ t.last|ago }}</td>
+        <td>{{ t.next|until }}</td>
+        <td><form method="post" action="/settings/run/{{ t.name }}"><button type="submit" class="secondary">Запустить сейчас</button></form></td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+
+  {% if sid == 'export' %}
+    <h2 style="margin-top:20px">Последние отправки</h2>
+    <table>
+      <tr><th>Когда</th><th>Проект</th><th>Нод</th><th>Результат</th></tr>
+      {% for e in export_log %}
+      <tr><td>{{ e.ts|dt }}</td><td>{{ e.project }}</td><td>{{ e.count }}</td><td class="{{ 'ok' if e.ok else 'bad' }}">{{ e.status }}</td></tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">Ещё не отправлялось</td></tr>
+      {% endfor %}
+    </table>
+    <p class="muted">Формат: <code>POST {"vantage":"home","ts":…,"results":[{"ip","name","state","ssh_ok","ssh_status","proxy_ok","proxy_status","latency_ms","ts"}]}</code>, заголовок <code>Authorization: Bearer &lt;токен&gt;</code>. Уходит через исходящий VPS, если он включён.</p>
+  {% endif %}
+</div>
+{% endfor %}
+
+<div class="card">
+  <h2>История изменений</h2>
+  <table>
+    <tr><th>Когда</th><th>Параметр</th><th>Было</th><th>Стало</th></tr>
+    {% for h in history %}
+    <tr><td>{{ h.ts|dt }}</td><td>{{ meta[h.key].label if h.key in meta else h.key }}</td><td class="muted">{{ h.old_value }}</td><td>{{ h.new_value }}</td></tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">Пусто</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
