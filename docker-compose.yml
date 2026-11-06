@@ -24,3 +24,15 @@ services:
       ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${TTYD_USER:?set TTYD_USER in .env}@127.0.0.1
     depends_on: [app]
     restart: unless-stopped
+
+  # Чекер на этой же машине (штатная конфигурация). Токен: панель → «Чекеры» → «Добавить».
+  # Раскомментировать и задать CHECKER_TOKEN в .env:
+  # agent:
+  #   build: ./agent
+  #   container_name: nodecheck-agent
+  #   network_mode: host
+  #   environment:
+  #     PANEL_URL: http://127.0.0.1:8000
+  #     CHECKER_TOKEN: ${CHECKER_TOKEN:?set CHECKER_TOKEN in .env}
+  #   depends_on: [app]
+  #   restart: unless-stopped
