@@ -4,6 +4,7 @@
 «Синхронизировать ноду» для одной ноды. Ключ ноды источника — (source_id, external_id).
 Новая нода источника получает собственную цель проверки; связывание — только вручную (nodes.link).
 """
+
 import json
 import time
 import urllib.error
@@ -27,6 +28,7 @@ def _get_json(url, token, timeout=15):
 
 # ---------- адаптеры типов: всё приводится к {external_id, name, address, flags, fresh_port, is_active} ----------
 
+
 def _remnawave_item(n):
     flags = []
     if n.get("isDisabled"):
@@ -34,9 +36,12 @@ def _remnawave_item(n):
     if not n.get("isConnected"):
         flags.append("offline")
     return {
-        "external_id": str(n.get("uuid") or ""), "name": n.get("name") or "",
-        "address": (n.get("address") or "").strip(), "flags": ", ".join(flags),
-        "fresh_port": None, "is_active": 0 if n.get("isDisabled") else 1,
+        "external_id": str(n.get("uuid") or ""),
+        "name": n.get("name") or "",
+        "address": (n.get("address") or "").strip(),
+        "flags": ", ".join(flags),
+        "fresh_port": None,
+        "is_active": 0 if n.get("isDisabled") else 1,
     }
 
 
@@ -54,8 +59,10 @@ def _open60_item(n):
     return {
         "external_id": str(n.get("id") or ""),
         "name": f"#{n.get('id')} {n.get('country', '')} {n.get('city') or ''}".strip(),
-        "address": (n.get("ip_address") or "").strip(), "flags": ", ".join(flags),
-        "fresh_port": n.get("fresh_port"), "is_active": 1 if active else 0,
+        "address": (n.get("ip_address") or "").strip(),
+        "flags": ", ".join(flags),
+        "fresh_port": n.get("fresh_port"),
+        "is_active": 1 if active else 0,
     }
 
 
@@ -94,26 +101,43 @@ def fetch_one(src, external_id):
 
 # ---------- запись в базу ----------
 
+
 def _upsert(source_id, item, now):
     """Записать ноду источника. Возвращает node_id её цели проверки."""
-    row = db.q1("SELECT id, node_id FROM source_nodes WHERE source_id=? AND external_id=?",
-                (source_id, item["external_id"]))
+    row = db.q1(
+        "SELECT id, node_id FROM source_nodes WHERE source_id=? AND external_id=?", (source_id, item["external_id"])
+    )
     if row:
-        db.x("UPDATE source_nodes SET name=?, address=?, flags=?, fresh_port=?, is_active=?, last_seen_at=? "
-             "WHERE id=?", (item["name"], item["address"], item["flags"], item["fresh_port"],
-                            item["is_active"], now, row["id"]))
+        db.x(
+            "UPDATE source_nodes SET name=?, address=?, flags=?, fresh_port=?, is_active=?, last_seen_at=? "
+            "WHERE id=?",
+            (item["name"], item["address"], item["flags"], item["fresh_port"], item["is_active"], now, row["id"]),
+        )
         return row["node_id"]
     node_id = nodes.create_target(now)
-    db.x("INSERT INTO source_nodes(source_id, external_id, name, address, flags, fresh_port, is_active, "
-         "node_id, is_primary, last_seen_at) VALUES(?,?,?,?,?,?,?,?,1,?)",
-         (source_id, item["external_id"], item["name"], item["address"], item["flags"],
-          item["fresh_port"], item["is_active"], node_id, now))
+    db.x(
+        "INSERT INTO source_nodes(source_id, external_id, name, address, flags, fresh_port, is_active, "
+        "node_id, is_primary, last_seen_at) VALUES(?,?,?,?,?,?,?,?,1,?)",
+        (
+            source_id,
+            item["external_id"],
+            item["name"],
+            item["address"],
+            item["flags"],
+            item["fresh_port"],
+            item["is_active"],
+            node_id,
+            now,
+        ),
+    )
     return node_id
 
 
 def _set_status(source_id, ok, msg):
-    db.x("UPDATE sources SET last_sync_at=?, last_sync_ok=?, last_sync_msg=? WHERE id=?",
-         (int(time.time()), 1 if ok else 0, msg[:300], source_id))
+    db.x(
+        "UPDATE sources SET last_sync_at=?, last_sync_ok=?, last_sync_msg=? WHERE id=?",
+        (int(time.time()), 1 if ok else 0, msg[:300], source_id),
+    )
 
 
 def sync_source(source_id):
@@ -189,6 +213,7 @@ def sync_all():
 
 # ---------- CRUD источников ----------
 
+
 def all_sources():
     return [dict(r) for r in db.q("SELECT * FROM sources ORDER BY id")]
 
@@ -202,8 +227,11 @@ def save(source_id, data):
     """Создать (source_id=None) или обновить источник. Пустой токен при обновлении — не менять."""
     fields = ("type", "name", "url", "token", "export_url", "export_token")
     if source_id is None:
-        return db.x("INSERT INTO sources(type, name, url, token, export_url, export_token, created_at) "
-                    "VALUES(?,?,?,?,?,?,?)", (*[data.get(f, "") for f in fields], int(time.time())))
+        return db.x(
+            "INSERT INTO sources(type, name, url, token, export_url, export_token, created_at) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (*[data.get(f, "") for f in fields], int(time.time())),
+        )
     cur = get(source_id)
     if not cur:
         return None
@@ -211,16 +239,17 @@ def save(source_id, data):
     for secret in ("token", "export_token"):
         if not data.get(secret):
             upd[secret] = cur[secret]
-    upd["type"] = cur["type"]   # тип не меняется: external_id разных типов несовместимы
-    db.x("UPDATE sources SET name=?, url=?, token=?, export_url=?, export_token=? WHERE id=?",
-         (upd["name"], upd["url"], upd["token"], upd["export_url"], upd["export_token"], source_id))
+    upd["type"] = cur["type"]  # тип не меняется: external_id разных типов несовместимы
+    db.x(
+        "UPDATE sources SET name=?, url=?, token=?, export_url=?, export_token=? WHERE id=?",
+        (upd["name"], upd["url"], upd["token"], upd["export_url"], upd["export_token"], source_id),
+    )
     return source_id
 
 
 def delete(source_id):
     with nodes.lock:
-        ids = [r["node_id"] for r in db.q("SELECT DISTINCT node_id FROM source_nodes WHERE source_id=?",
-                                          (source_id,))]
+        ids = [r["node_id"] for r in db.q("SELECT DISTINCT node_id FROM source_nodes WHERE source_id=?", (source_id,))]
         db.x("DELETE FROM source_nodes WHERE source_id=?", (source_id,))
         db.x("DELETE FROM sources WHERE id=?", (source_id,))
         for node_id in ids:

@@ -1,5 +1,6 @@
 """WireGuard-туннель панель → VPS. Контейнер управляет интерфейсом сам
 (network_mode: host + NET_ADMIN), конфиг лежит в /etc/wireguard/wg0.conf."""
+
 import os
 import re
 import subprocess
@@ -96,11 +97,18 @@ def status():
         if len(p) < 8:
             continue
         hs = int(p[4] or 0)
-        info["peers"].append({
-            "pubkey": p[0], "endpoint": p[2], "allowed": p[3],
-            "handshake": hs, "handshake_age": None if hs == 0 else int(time.time() - hs),
-            "rx": int(p[5] or 0), "tx": int(p[6] or 0), "keepalive": p[7],
-        })
+        info["peers"].append(
+            {
+                "pubkey": p[0],
+                "endpoint": p[2],
+                "allowed": p[3],
+                "handshake": hs,
+                "handshake_age": None if hs == 0 else int(time.time() - hs),
+                "rx": int(p[5] or 0),
+                "tx": int(p[6] or 0),
+                "keepalive": p[7],
+            }
+        )
     return info
 
 
@@ -220,20 +228,29 @@ def provision():
     if not host or not pw:
         return False, "Заполни IP, логин и пароль VPS в блоке «Туннель» и сохрани"
     ensure_keys()
-    script = (REMOTE_SCRIPT
-              .replace("__SERVER_ADDR__", settings.get("wg_server_addr"))
-              .replace("__PORT__", str(settings.get("wg_port")))
-              .replace("__CLIENT_PUB__", settings.get("wg_client_pubkey"))
-              .replace("__CLIENT_ADDR__", settings.get("wg_client_addr")))
+    script = (
+        REMOTE_SCRIPT.replace("__SERVER_ADDR__", settings.get("wg_server_addr"))
+        .replace("__PORT__", str(settings.get("wg_port")))
+        .replace("__CLIENT_PUB__", settings.get("wg_client_pubkey"))
+        .replace("__CLIENT_ADDR__", settings.get("wg_client_addr"))
+    )
     remote_cmd = "bash -s" if user == "root" else "sudo -n bash -s"
     cmd = [
-        "sshpass", "-e", "ssh",
-        "-p", str(settings.get("wg_vps_ssh_port")),
-        "-o", "ConnectTimeout=15",
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "UserKnownHostsFile=/dev/null",
-        "-o", "LogLevel=ERROR",
-        f"{user}@{host}", remote_cmd,
+        "sshpass",
+        "-e",
+        "ssh",
+        "-p",
+        str(settings.get("wg_vps_ssh_port")),
+        "-o",
+        "ConnectTimeout=15",
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "-o",
+        "LogLevel=ERROR",
+        f"{user}@{host}",
+        remote_cmd,
     ]
     env = dict(os.environ, SSHPASS=pw)
     try:
@@ -252,10 +269,12 @@ def provision():
     m = re.search(r"NODECHECK_SERVER_PUB=(\S+)", r.stdout)
     if not m:
         return False, f"VPS не вернул ключ: {r.stdout[-300:]}"
-    settings.set_many({
-        "wg_server_pubkey": m.group(1),
-        "wg_endpoint": f"{host}:{settings.get('wg_port')}",
-    })
+    settings.set_many(
+        {
+            "wg_server_pubkey": m.group(1),
+            "wg_endpoint": f"{host}:{settings.get('wg_port')}",
+        }
+    )
     ok, msg = apply()
     return ok, ("VPS настроен, " + msg) if ok else ("VPS настроен, но " + msg)
 
@@ -291,12 +310,19 @@ def mode():
 
 def _ssh_base(extra_opts=()):
     return [
-        "sshpass", "-e", "ssh",
-        "-p", str(settings.get("wg_vps_ssh_port")),
-        "-o", "ConnectTimeout=15",
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "UserKnownHostsFile=/dev/null",
-        "-o", "LogLevel=ERROR",
+        "sshpass",
+        "-e",
+        "ssh",
+        "-p",
+        str(settings.get("wg_vps_ssh_port")),
+        "-o",
+        "ConnectTimeout=15",
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "-o",
+        "LogLevel=ERROR",
         *extra_opts,
         f"{(settings.get('wg_vps_user') or 'root').strip()}@{settings.get('wg_vps_host').strip()}",
     ]
@@ -316,14 +342,21 @@ def ssh_start():
     if not ssh_creds_ok():
         return
     b = settings.get("ssh_bind_addr").strip() or "127.0.0.1"
-    cmd = _ssh_base([
-        "-N",
-        "-o", "ServerAliveInterval=20",
-        "-o", "ServerAliveCountMax=3",
-        "-o", "ExitOnForwardFailure=yes",
-        "-R", f"{b}:{settings.get('ssh_app_port')}:127.0.0.1:8000",
-        "-R", f"{b}:{settings.get('ssh_ttyd_port')}:127.0.0.1:7681",
-    ])
+    cmd = _ssh_base(
+        [
+            "-N",
+            "-o",
+            "ServerAliveInterval=20",
+            "-o",
+            "ServerAliveCountMax=3",
+            "-o",
+            "ExitOnForwardFailure=yes",
+            "-R",
+            f"{b}:{settings.get('ssh_app_port')}:127.0.0.1:8000",
+            "-R",
+            f"{b}:{settings.get('ssh_ttyd_port')}:127.0.0.1:7681",
+        ]
+    )
     os.makedirs(config.DATA_DIR, exist_ok=True)
     log = open(_ssh_log, "ab")
     log.write(f"\n--- {time.strftime('%Y-%m-%d %H:%M:%S')} start\n".encode())
@@ -357,8 +390,13 @@ def ssh_log_tail(n=6):
 def ssh_test():
     """С VPS: отвечает ли проброшенный порт приложения."""
     url = f"http://{settings.get('ssh_bind_addr')}:{settings.get('ssh_app_port')}/login"
-    r = subprocess.run(_ssh_base() + [f"curl -s -m 5 -o /dev/null -w '%{{http_code}}' {url}"],
-                       capture_output=True, text=True, timeout=40, env=_ssh_env())
+    r = subprocess.run(
+        _ssh_base() + [f"curl -s -m 5 -o /dev/null -w '%{{http_code}}' {url}"],
+        capture_output=True,
+        text=True,
+        timeout=40,
+        env=_ssh_env(),
+    )
     code = r.stdout.strip().strip("'")
     if r.returncode != 0:
         return False, f"SSH до VPS не прошёл: {(r.stderr or r.stdout).strip()[-200:]}"
@@ -387,8 +425,9 @@ def ssh_provision():
     user = (settings.get("wg_vps_user") or "root").strip()
     remote_cmd = "bash -s" if user == "root" else "sudo -n bash -s"
     try:
-        r = subprocess.run(_ssh_base() + [remote_cmd], input=SSHD_SCRIPT, capture_output=True,
-                           text=True, timeout=60, env=_ssh_env())
+        r = subprocess.run(
+            _ssh_base() + [remote_cmd], input=SSHD_SCRIPT, capture_output=True, text=True, timeout=60, env=_ssh_env()
+        )
     except subprocess.TimeoutExpired:
         return False, "VPS не ответил за минуту"
     if r.returncode != 0 or "NODECHECK_SSHD_OK" not in r.stdout:
@@ -435,8 +474,14 @@ def apply_any():
 
 def ui_status():
     if mode() == "ssh":
-        return {"mode": "ssh", "up": ssh_alive(), "since": ssh_state["started"],
-                "restarts": ssh_state["restarts"], "log": ssh_log_tail(), "peers": []}
+        return {
+            "mode": "ssh",
+            "up": ssh_alive(),
+            "since": ssh_state["started"],
+            "restarts": ssh_state["restarts"],
+            "log": ssh_log_tail(),
+            "peers": [],
+        }
     st = status()
     st["mode"] = "wireguard"
     return st

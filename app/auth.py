@@ -1,5 +1,6 @@
 """Два режима по Host: admin (токен) и status (PIN). Cookie подписывается
 HMAC'ом текущего секрета — смена токена/пина сразу разлогинивает всех."""
+
 import hashlib
 import hmac
 import threading

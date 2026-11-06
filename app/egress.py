@@ -6,6 +6,7 @@
   socks5 — готовый SOCKS5-прокси на VPS
   http   — готовый HTTP-прокси на VPS
 """
+
 import os
 import subprocess
 
@@ -48,14 +49,24 @@ def ensure():
         return
     env = dict(os.environ, SSHPASS=settings.get("egress_password") or "")
     cmd = [
-        "sshpass", "-e", "ssh", "-N",
-        "-D", f"127.0.0.1:{settings.get('egress_local_port')}",
-        "-p", str(settings.get("egress_port")),
-        "-o", "ServerAliveInterval=30",
-        "-o", "ServerAliveCountMax=3",
-        "-o", "ExitOnForwardFailure=yes",
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "UserKnownHostsFile=/dev/null",
+        "sshpass",
+        "-e",
+        "ssh",
+        "-N",
+        "-D",
+        f"127.0.0.1:{settings.get('egress_local_port')}",
+        "-p",
+        str(settings.get("egress_port")),
+        "-o",
+        "ServerAliveInterval=30",
+        "-o",
+        "ServerAliveCountMax=3",
+        "-o",
+        "ExitOnForwardFailure=yes",
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "UserKnownHostsFile=/dev/null",
         f"{settings.get('egress_user')}@{settings.get('egress_host')}",
     ]
     try:

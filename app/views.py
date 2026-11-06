@@ -1,4 +1,5 @@
 """Общее для роутов: шаблоны, выборка нод с текущим состоянием, фильтры."""
+
 import os
 import time
 
@@ -10,8 +11,13 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 
 # цвета агрегата (плитка); yellow встречается только в отдельных результатах чекеров
 COLORS = ("green", "orange", "red", "grey")
-COLOR_LABEL = {"green": "работает", "orange": "недоступна у части чекеров", "red": "недоступна",
-               "grey": "нет данных", "yellow": "жив, прокси нет"}
+COLOR_LABEL = {
+    "green": "работает",
+    "orange": "недоступна у части чекеров",
+    "red": "недоступна",
+    "grey": "нет данных",
+    "yellow": "жив, прокси нет",
+}
 
 
 def ago(ts):

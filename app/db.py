@@ -1,4 +1,5 @@
 """SQLite панели. Схема v2: источники → ноды источников → цели проверки (nodes) → результаты чекеров."""
+
 import os
 import sqlite3
 import threading
@@ -184,8 +185,7 @@ def kv_get(key, default=None):
 
 
 def kv_set(key, value):
-    x("INSERT INTO kv(key, value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-      (key, str(value)))
+    x("INSERT INTO kv(key, value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
 
 def init():

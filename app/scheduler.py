@@ -1,4 +1,5 @@
 """Фоновые задачи панели (APScheduler). Сама панель ничего не проверяет — это делают чекеры."""
+
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -28,8 +29,9 @@ def cleanup():
     cutoff = int(time.time()) - settings.get("retention_days") * 86400
     db.x("DELETE FROM results WHERE ts < ?", (cutoff,))
     old = int(time.time()) - 7 * 86400
-    db.x("DELETE FROM job_checkers WHERE job_id IN (SELECT id FROM jobs WHERE status='done' AND finished_at < ?)",
-         (old,))
+    db.x(
+        "DELETE FROM job_checkers WHERE job_id IN (SELECT id FROM jobs WHERE status='done' AND finished_at < ?)", (old,)
+    )
     db.x("DELETE FROM jobs WHERE status='done' AND finished_at < ?", (old,))
 
 
@@ -49,6 +51,7 @@ def _wrap(name, fn):
             last_error.pop(name, None)
         except Exception as e:
             last_error[name] = str(e)[:200]
+
     return inner
 
 
@@ -65,8 +68,7 @@ def setup():
     now = datetime.now(timezone.utc)
     first = {"sync_nodes": 5, "cleanup": 60, "egress_watchdog": 15, "tunnel_watchdog": 20}
     for name, trig in _triggers().items():
-        sched.add_job(_wrap(name, TASKS[name][1]), trig, id=name,
-                      next_run_time=now + timedelta(seconds=first[name]))
+        sched.add_job(_wrap(name, TASKS[name][1]), trig, id=name, next_run_time=now + timedelta(seconds=first[name]))
     sched.start()
 
 
@@ -85,6 +87,13 @@ def info():
     for name, (label, _) in TASKS.items():
         job = sched.get_job(name)
         nxt = job.next_run_time.timestamp() if job and job.next_run_time else None
-        out.append({"name": name, "label": label, "last": last_run.get(name),
-                    "next": int(nxt) if nxt else None, "error": last_error.get(name)})
+        out.append(
+            {
+                "name": name,
+                "label": label,
+                "last": last_run.get(name),
+                "next": int(nxt) if nxt else None,
+                "error": last_error.get(name),
+            }
+        )
     return out

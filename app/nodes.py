@@ -7,6 +7,7 @@
   is_active  — активна, если активна хоть одна связанная.
 Любое изменение этих атрибутов повышает nodes.rev и глобальный nodes_revision.
 """
+
 import threading
 import time
 import uuid
@@ -28,16 +29,21 @@ def _bump_revision():
 def create_target(now=None) -> str:
     now = now or int(time.time())
     node_id = str(uuid.uuid4())
-    db.x("INSERT INTO nodes(id, address, fresh_port, is_active, rev, created_at, updated_at) "
-         "VALUES(?, '', NULL, 0, 0, ?, ?)", (node_id, now, now))
+    db.x(
+        "INSERT INTO nodes(id, address, fresh_port, is_active, rev, created_at, updated_at) "
+        "VALUES(?, '', NULL, 0, 0, ?, ?)",
+        (node_id, now, now),
+    )
     return node_id
 
 
 def _delete_target(node_id):
-    for sql in ("DELETE FROM nodes WHERE id=?",
-                "DELETE FROM node_state WHERE node_id=?",
-                "DELETE FROM node_checker_state WHERE node_id=?",
-                "UPDATE incidents SET closed_at=? WHERE node_id=? AND closed_at IS NULL"):
+    for sql in (
+        "DELETE FROM nodes WHERE id=?",
+        "DELETE FROM node_state WHERE node_id=?",
+        "DELETE FROM node_checker_state WHERE node_id=?",
+        "UPDATE incidents SET closed_at=? WHERE node_id=? AND closed_at IS NULL",
+    ):
         if sql.startswith("UPDATE"):
             db.x(sql, (int(time.time()), node_id))
         else:
@@ -50,15 +56,20 @@ def recompute(node_id):
     Возвращает dict(changed, deleted, old_address, new_address).
     """
     with lock:
-        sns = [dict(r) for r in db.q(
-            "SELECT * FROM source_nodes WHERE node_id=? ORDER BY is_primary DESC, id", (node_id,))]
+        sns = [
+            dict(r) for r in db.q("SELECT * FROM source_nodes WHERE node_id=? ORDER BY is_primary DESC, id", (node_id,))
+        ]
         node = db.q1("SELECT * FROM nodes WHERE id=?", (node_id,))
         if not sns:
             if node:
                 _delete_target(node_id)
                 _bump_revision()
-            return {"changed": True, "deleted": True, "old_address": node["address"] if node else None,
-                    "new_address": None}
+            return {
+                "changed": True,
+                "deleted": True,
+                "old_address": node["address"] if node else None,
+                "new_address": None,
+            }
         # ровно одна основная
         primary = sns[0]
         if not primary["is_primary"] or sum(s["is_primary"] for s in sns) != 1:
@@ -70,8 +81,10 @@ def recompute(node_id):
             return {"changed": False, "deleted": False, "old_address": None, "new_address": address}
         if (node["address"], node["fresh_port"], node["is_active"]) == (address, port, active):
             return {"changed": False, "deleted": False, "old_address": address, "new_address": address}
-        db.x("UPDATE nodes SET address=?, fresh_port=?, is_active=?, rev=rev+1, updated_at=? WHERE id=?",
-             (address, port, active, int(time.time()), node_id))
+        db.x(
+            "UPDATE nodes SET address=?, fresh_port=?, is_active=?, rev=rev+1, updated_at=? WHERE id=?",
+            (address, port, active, int(time.time()), node_id),
+        )
         _bump_revision()
         return {"changed": True, "deleted": False, "old_address": node["address"], "new_address": address}
 
@@ -81,11 +94,12 @@ def link(node_id, other_node_id):
     if node_id == other_node_id:
         return False
     with lock:
-        if not db.q1("SELECT 1 FROM nodes WHERE id=?", (node_id,)) or \
-                not db.q1("SELECT 1 FROM nodes WHERE id=?", (other_node_id,)):
+        if not db.q1("SELECT 1 FROM nodes WHERE id=?", (node_id,)) or not db.q1(
+            "SELECT 1 FROM nodes WHERE id=?", (other_node_id,)
+        ):
             return False
         db.x("UPDATE source_nodes SET node_id=?, is_primary=0 WHERE node_id=?", (node_id, other_node_id))
-        recompute(other_node_id)   # пустая → удалится
+        recompute(other_node_id)  # пустая → удалится
         recompute(node_id)
         return True
 
@@ -97,7 +111,7 @@ def unlink(source_node_id):
         if not sn:
             return None
         if db.q1("SELECT COUNT(*) AS c FROM source_nodes WHERE node_id=?", (sn["node_id"],))["c"] < 2:
-            return sn["node_id"]   # и так одна
+            return sn["node_id"]  # и так одна
         new_id = create_target()
         db.x("UPDATE source_nodes SET node_id=?, is_primary=1 WHERE id=?", (new_id, source_node_id))
         recompute(sn["node_id"])
@@ -117,10 +131,14 @@ def set_primary(source_node_id):
 
 def linked(node_id):
     """Ноды источников, входящие в цель, с именем источника."""
-    return [dict(r) for r in db.q(
-        "SELECT sn.*, s.name AS source_name, s.type AS source_type FROM source_nodes sn "
-        "JOIN sources s ON s.id = sn.source_id WHERE sn.node_id=? ORDER BY sn.is_primary DESC, sn.id",
-        (node_id,))]
+    return [
+        dict(r)
+        for r in db.q(
+            "SELECT sn.*, s.name AS source_name, s.type AS source_type FROM source_nodes sn "
+            "JOIN sources s ON s.id = sn.source_id WHERE sn.node_id=? ORDER BY sn.is_primary DESC, sn.id",
+            (node_id,),
+        )
+    ]
 
 
 def address_mismatch(node_id) -> bool:
@@ -133,21 +151,32 @@ def same_address_targets(node_id):
     node = db.q1("SELECT address FROM nodes WHERE id=?", (node_id,))
     if not node or not node["address"]:
         return []
-    return [dict(r) for r in db.q(
-        "SELECT n.id, n.address, GROUP_CONCAT(s.name || ': ' || sn.name, ', ') AS label "
-        "FROM nodes n JOIN source_nodes sn ON sn.node_id = n.id JOIN sources s ON s.id = sn.source_id "
-        "WHERE n.address = ? AND n.id != ? GROUP BY n.id", (node["address"], node_id))]
+    return [
+        dict(r)
+        for r in db.q(
+            "SELECT n.id, n.address, GROUP_CONCAT(s.name || ': ' || sn.name, ', ') AS label "
+            "FROM nodes n JOIN source_nodes sn ON sn.node_id = n.id JOIN sources s ON s.id = sn.source_id "
+            "WHERE n.address = ? AND n.id != ? GROUP BY n.id",
+            (node["address"], node_id),
+        )
+    ]
 
 
 def duplicate_addresses() -> set:
     """Адреса, которые встречаются у нескольких разных целей."""
-    return {r["address"] for r in db.q(
-        "SELECT address FROM nodes WHERE address != '' GROUP BY address HAVING COUNT(*) > 1")}
+    return {
+        r["address"] for r in db.q("SELECT address FROM nodes WHERE address != '' GROUP BY address HAVING COUNT(*) > 1")
+    }
 
 
 def link_candidates(node_id):
     """Все остальные цели для выпадающего списка «связать с…»."""
-    return [dict(r) for r in db.q(
-        "SELECT n.id, n.address, GROUP_CONCAT(s.name || ': ' || sn.name, ', ') AS label "
-        "FROM nodes n JOIN source_nodes sn ON sn.node_id = n.id JOIN sources s ON s.id = sn.source_id "
-        "WHERE n.id != ? GROUP BY n.id ORDER BY label", (node_id,))]
+    return [
+        dict(r)
+        for r in db.q(
+            "SELECT n.id, n.address, GROUP_CONCAT(s.name || ': ' || sn.name, ', ') AS label "
+            "FROM nodes n JOIN source_nodes sn ON sn.node_id = n.id JOIN sources s ON s.id = sn.source_id "
+            "WHERE n.id != ? GROUP BY n.id ORDER BY label",
+            (node_id,),
+        )
+    ]

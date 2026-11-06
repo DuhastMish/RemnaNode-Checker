@@ -1,4 +1,5 @@
 """Admin: источники нод — список, добавление, изменение, удаление, проверка подключения, синхронизация."""
+
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 

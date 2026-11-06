@@ -1,4 +1,5 @@
 """Настройки в таблице settings: кэш в памяти, история изменений, дефолты."""
+
 import json
 import secrets
 import threading
@@ -12,25 +13,74 @@ FIELDS = [
     # --- панель ---
     ("scheduler", "sync_interval_min", "Синхронизация нод из источников, мин", "int", 10, ""),
     ("scheduler", "retention_days", "Хранить историю результатов, дней", "int", 30, ""),
-    ("scheduler", "status_cache_sec", "Кэш результата для status-страницы, с", "int", 60, "повторная ручная проверка раньше этого срока отдаёт кэш"),
+    (
+        "scheduler",
+        "status_cache_sec",
+        "Кэш результата для status-страницы, с",
+        "int",
+        60,
+        "повторная ручная проверка раньше этого срока отдаёт кэш",
+    ),
     # --- параметры проверок: уходят чекерам в config ---
-    ("checks", "check_interval_min", "Плановая проверка всех нод, мин", "int", 5, "каждый чекер проверяет все активные ноды с этим интервалом"),
+    (
+        "checks",
+        "check_interval_min",
+        "Плановая проверка всех нод, мин",
+        "int",
+        5,
+        "каждый чекер проверяет все активные ноды с этим интервалом",
+    ),
     ("checks", "max_workers", "Воркеров в пуле чекера", "int", 15, "сколько нод чекер проверяет одновременно"),
     ("checks", "probes", "Попыток SSH на ноду", "int", 2, ""),
     ("checks", "proxy_timeout_sec", "Таймаут пробы через прокси, с", "int", 8, ""),
-    ("checks", "proxy_probe_url", "URL пробы через прокси", "str", "", "ответ должен быть {\"ok\": true, \"ip\": \"<ip ноды>\"}, например https://api.example.com/probe"),
+    (
+        "checks",
+        "proxy_probe_url",
+        "URL пробы через прокси",
+        "str",
+        "",
+        'ответ должен быть {"ok": true, "ip": "<ip ноды>"}, например https://api.example.com/probe',
+    ),
     # --- туннель ---
-    ("tunnel", "tunnel_mode", "Транспорт", "str", "ssh", "ssh — обратный SSH-туннель, провайдеры не режут; wireguard — быстрее, но ТСПУ блокирует"),
+    (
+        "tunnel",
+        "tunnel_mode",
+        "Транспорт",
+        "str",
+        "ssh",
+        "ssh — обратный SSH-туннель, провайдеры не режут; wireguard — быстрее, но ТСПУ блокирует",
+    ),
     ("tunnel", "wg_vps_host", "VPS: IP для SSH", "str", "", "обычно тот же, что исходящий"),
     ("tunnel", "wg_vps_ssh_port", "VPS: порт SSH", "int", 22, ""),
     ("tunnel", "wg_vps_user", "VPS: логин", "str", "root", "root или пользователь с sudo без пароля"),
     ("tunnel", "wg_vps_password", "VPS: пароль", "secret", "", "используется только при автонастройке"),
-    ("tunnel", "ssh_bind_addr", "SSH: адрес на VPS для пробросов", "str", "172.18.0.1", "адрес, по которому nginx в docker видит хост (gateway его сети); 127.0.0.1 если nginx на хосте"),
+    (
+        "tunnel",
+        "ssh_bind_addr",
+        "SSH: адрес на VPS для пробросов",
+        "str",
+        "172.18.0.1",
+        "адрес, по которому nginx в docker видит хост (gateway его сети); 127.0.0.1 если nginx на хосте",
+    ),
     ("tunnel", "ssh_app_port", "SSH: порт приложения на VPS", "int", 18000, "nginx → proxy_pass на этот порт"),
     ("tunnel", "ssh_ttyd_port", "SSH: порт терминала на VPS", "int", 17681, ""),
     ("tunnel", "wg_port", "WG: порт WireGuard на VPS", "int", 4443, "не 51820 — его режут первым"),
-    ("tunnel", "wg_endpoint", "WG: адрес VPS (IP:порт)", "str", "", "заполнится автонастройкой; или вручную 1.2.3.4:51820"),
-    ("tunnel", "wg_server_pubkey", "WG: публичный ключ VPS", "str", "", "заполнится автонастройкой; или содержимое server.pub"),
+    (
+        "tunnel",
+        "wg_endpoint",
+        "WG: адрес VPS (IP:порт)",
+        "str",
+        "",
+        "заполнится автонастройкой; или вручную 1.2.3.4:51820",
+    ),
+    (
+        "tunnel",
+        "wg_server_pubkey",
+        "WG: публичный ключ VPS",
+        "str",
+        "",
+        "заполнится автонастройкой; или содержимое server.pub",
+    ),
     ("tunnel", "wg_server_addr", "WG: адрес VPS в туннеле", "str", "10.8.0.1", ""),
     ("tunnel", "wg_client_addr", "WG: адрес панели в туннеле", "str", "10.8.0.2", ""),
     ("tunnel", "wg_keepalive", "WG: PersistentKeepalive, с", "int", 25, "обязателен за NAT провайдера"),
@@ -148,5 +198,4 @@ def seed():
 
 
 def history(limit=20):
-    return [dict(r) for r in db.q(
-        "SELECT * FROM settings_history ORDER BY id DESC LIMIT ?", (limit,))]
+    return [dict(r) for r in db.q("SELECT * FROM settings_history ORDER BY id DESC LIMIT ?", (limit,))]

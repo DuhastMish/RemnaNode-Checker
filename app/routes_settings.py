@@ -1,4 +1,5 @@
 """Страница настроек: по форме на секцию, плюс действия (применить туннель, тесты, запустить задачу)."""
+
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
@@ -19,12 +20,23 @@ def settings_page(request: Request):
         if meta["type"] == "secret":
             values[key] = ""
     return views.render(
-        request, "settings.html", title="Настройки",
-        sections=settings.SECTIONS, fields=settings.FIELDS, values=values, meta=settings.META,
-        tunnel=tunnel.ui_status(), tunnel_apply=tunnel.last_apply, tunnel_provision=tunnel.last_provision, peer_block=tunnel.peer_block(),
-        client_pubkey=settings.get("wg_client_pubkey"), tasks=scheduler.info(),
-        egress_alive=egress.alive(), egress_error=egress.last_error,
-        last_sync=scheduler.last_sync, history=settings.history(15),
+        request,
+        "settings.html",
+        title="Настройки",
+        sections=settings.SECTIONS,
+        fields=settings.FIELDS,
+        values=values,
+        meta=settings.META,
+        tunnel=tunnel.ui_status(),
+        tunnel_apply=tunnel.last_apply,
+        tunnel_provision=tunnel.last_provision,
+        peer_block=tunnel.peer_block(),
+        client_pubkey=settings.get("wg_client_pubkey"),
+        tasks=scheduler.info(),
+        egress_alive=egress.alive(),
+        egress_error=egress.last_error,
+        last_sync=scheduler.last_sync,
+        history=settings.history(15),
     )
 
 
@@ -63,13 +75,22 @@ async def settings_save(request: Request):
         scheduler.apply_intervals()
     elif section == "egress":
         egress.ensure()
-    elif section == "tunnel" and tunnel.mode() == "ssh" and any(k.startswith(("wg_vps_", "ssh_", "tunnel_mode")) for k in changed):
+    elif (
+        section == "tunnel"
+        and tunnel.mode() == "ssh"
+        and any(k.startswith(("wg_vps_", "ssh_", "tunnel_mode")) for k in changed)
+    ):
         tunnel.ssh_start()
 
     resp = _back(section, "Сохранено" if changed else "Без изменений")
     if "admin_token" in changed:  # не разлогинивать самого себя
-        resp.set_cookie(auth.COOKIE, auth.cookie_value("admin"),
-                        max_age=settings.get("cookie_days") * 86400, httponly=True, samesite="lax")
+        resp.set_cookie(
+            auth.COOKIE,
+            auth.cookie_value("admin"),
+            max_age=settings.get("cookie_days") * 86400,
+            httponly=True,
+            samesite="lax",
+        )
     return resp
 
 
@@ -97,7 +118,11 @@ def tunnel_provision(request: Request):
 def tunnel_test(request: Request):
     auth.require_admin(request)
     try:
-        ok, msg = tunnel.ssh_test() if tunnel.mode() == "ssh" else (tunnel.handshake_age() is not None, "handshake: " + str(tunnel.handshake_age()))
+        ok, msg = (
+            tunnel.ssh_test()
+            if tunnel.mode() == "ssh"
+            else (tunnel.handshake_age() is not None, "handshake: " + str(tunnel.handshake_age()))
+        )
     except Exception as e:
         ok, msg = False, str(e)[:200]
     return _back("tunnel", ("OK: " if ok else "Проблема: ") + msg)

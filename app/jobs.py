@@ -3,6 +3,7 @@
 Цель задания: {"node_id": <uuid>|None, "address": str, "port": int|None}.
 node_id=None — разовая цель (adhoc): в nodes не попадает, домен резолвит сам чекер.
 """
+
 import json
 import re
 import time
@@ -47,8 +48,10 @@ def create(targets, requested_by):
     targets = [t for t in targets if t]
     if not targets:
         return None
-    return db.x("INSERT INTO jobs(targets, requested_by, created_at) VALUES(?,?,?)",
-                (json.dumps(targets), requested_by, int(time.time())))
+    return db.x(
+        "INSERT INTO jobs(targets, requested_by, created_at) VALUES(?,?,?)",
+        (json.dumps(targets), requested_by, int(time.time())),
+    )
 
 
 def get(job_id):
@@ -69,6 +72,11 @@ def pending_with_target(address):
 
 
 def results(job_id):
-    return [dict(r) for r in db.q(
-        "SELECT r.*, c.name AS checker_name FROM results r LEFT JOIN checkers c ON c.id = r.checker_id "
-        "WHERE r.job_id=? ORDER BY r.id", (job_id,))]
+    return [
+        dict(r)
+        for r in db.q(
+            "SELECT r.*, c.name AS checker_name FROM results r LEFT JOIN checkers c ON c.id = r.checker_id "
+            "WHERE r.job_id=? ORDER BY r.id",
+            (job_id,),
+        )
+    ]

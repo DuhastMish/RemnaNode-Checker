@@ -1,5 +1,6 @@
 """Логин, admin-режим: плитки по источникам, карточка ноды и связывание, задания, терминал.
 `/` и `/check` диспетчеризуются по режиму."""
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
@@ -9,6 +10,7 @@ router = APIRouter()
 
 
 # ---------- логин ----------
+
 
 @router.get("/login")
 def login_page(request: Request):
@@ -25,8 +27,9 @@ def login_post(request: Request, credential: str = Form(""), next: str = Form("/
     if not next.startswith("/") or next.startswith("//"):
         next = "/"
     resp = RedirectResponse(next, status_code=303)
-    resp.set_cookie(auth.COOKIE, auth.cookie_value(role), max_age=settings.get("cookie_days") * 86400,
-                    httponly=True, samesite="lax")
+    resp.set_cookie(
+        auth.COOKIE, auth.cookie_value(role), max_age=settings.get("cookie_days") * 86400, httponly=True, samesite="lax"
+    )
     return resp
 
 
@@ -39,6 +42,7 @@ def logout(request: Request):
 
 # ---------- главная (диспетчер по режиму) ----------
 
+
 @router.get("/")
 def index(request: Request):
     if auth.mode(request) == "status":
@@ -47,8 +51,16 @@ def index(request: Request):
     tabs = views.tabs()
     source_id = views.current_tab(request, tabs)
     rows = views.nodes_with_state(source_id) if source_id is not None else []
-    return views.render(request, "admin.html", source=sources.get(source_id) if source_id else None,
-                        rows=rows, counts=views.counts(rows), tabs=tabs, refresh=30, title="Ноды")
+    return views.render(
+        request,
+        "admin.html",
+        source=sources.get(source_id) if source_id else None,
+        rows=rows,
+        counts=views.counts(rows),
+        tabs=tabs,
+        refresh=30,
+        title="Ноды",
+    )
 
 
 @router.get("/check")
@@ -71,9 +83,14 @@ def check_post(request: Request, source_id: str = Form(""), node_id: str = Form(
     elif node_id:
         targets = [jobs.target_for_node(node_id)]
     elif source_id:
-        ids = [r["node_id"] for r in db.q(
-            "SELECT DISTINCT n.id AS node_id FROM source_nodes sn JOIN nodes n ON n.id = sn.node_id "
-            "WHERE sn.source_id=? AND n.is_active=1", (source_id,))]
+        ids = [
+            r["node_id"]
+            for r in db.q(
+                "SELECT DISTINCT n.id AS node_id FROM source_nodes sn JOIN nodes n ON n.id = sn.node_id "
+                "WHERE sn.source_id=? AND n.is_active=1",
+                (source_id,),
+            )
+        ]
         targets = [jobs.target_for_node(i) for i in ids]
     else:
         targets = []
@@ -93,12 +110,14 @@ def check_json(request: Request, job: int):
 
 # ---------- admin: синхронизация ----------
 
+
 @router.post("/sync")
 def sync(request: Request, source_id: int = Form(...)):
     auth.require_admin(request)
     ok, msg, _changed = sources.sync_source(source_id)
-    return RedirectResponse(f"/?source={source_id}&msg=Синхронизация: {msg if ok else 'ошибка — ' + msg}",
-                            status_code=303)
+    return RedirectResponse(
+        f"/?source={source_id}&msg=Синхронизация: {msg if ok else 'ошибка — ' + msg}", status_code=303
+    )
 
 
 @router.post("/sn/{sn_id}/sync")
@@ -108,27 +127,45 @@ def sync_one(request: Request, sn_id: int):
     ok, msg, _changed = sources.sync_node(sn_id)
     still = db.q1("SELECT node_id FROM source_nodes WHERE id=?", (sn_id,))
     target = f"/node/{still['node_id']}" if still else "/"
-    return RedirectResponse(f"{target}?msg=Синхронизация ноды: {msg if ok else 'ошибка — ' + msg}"
-                            if sn else "/?msg=Нода не найдена", status_code=303)
+    return RedirectResponse(
+        f"{target}?msg=Синхронизация ноды: {msg if ok else 'ошибка — ' + msg}" if sn else "/?msg=Нода не найдена",
+        status_code=303,
+    )
 
 
 # ---------- admin: карточка цели проверки и связывание ----------
 
+
 @router.get("/node/{node_id}")
 def node_page(request: Request, node_id: str):
     auth.require_admin(request)
-    node = db.q1("SELECT n.*, COALESCE(ns.color, 'grey') AS color, ns.updated_at AS checked_at, "
-                 "ns.up_count, ns.down_count FROM nodes n LEFT JOIN node_state ns ON ns.node_id = n.id "
-                 "WHERE n.id=?", (node_id,))
+    node = db.q1(
+        "SELECT n.*, COALESCE(ns.color, 'grey') AS color, ns.updated_at AS checked_at, "
+        "ns.up_count, ns.down_count FROM nodes n LEFT JOIN node_state ns ON ns.node_id = n.id "
+        "WHERE n.id=?",
+        (node_id,),
+    )
     if not node:
         return RedirectResponse("/?msg=Нода не найдена", status_code=303)
-    hist = [dict(r) for r in db.q(
-        "SELECT r.*, c.name AS checker_name FROM results r LEFT JOIN checkers c ON c.id = r.checker_id "
-        "WHERE r.node_id=? ORDER BY r.id DESC LIMIT 50", (node_id,))]
+    hist = [
+        dict(r)
+        for r in db.q(
+            "SELECT r.*, c.name AS checker_name FROM results r LEFT JOIN checkers c ON c.id = r.checker_id "
+            "WHERE r.node_id=? ORDER BY r.id DESC LIMIT 50",
+            (node_id,),
+        )
+    ]
     return views.render(
-        request, "node.html", node=dict(node), linked=nodes.linked(node_id), hist=hist,
-        mismatch=nodes.address_mismatch(node_id), same=nodes.same_address_targets(node_id),
-        candidates=nodes.link_candidates(node_id), title=node["address"] or node_id[:8])
+        request,
+        "node.html",
+        node=dict(node),
+        linked=nodes.linked(node_id),
+        hist=hist,
+        mismatch=nodes.address_mismatch(node_id),
+        same=nodes.same_address_targets(node_id),
+        candidates=nodes.link_candidates(node_id),
+        title=node["address"] or node_id[:8],
+    )
 
 
 @router.post("/node/{node_id}/link")
@@ -158,6 +195,7 @@ def sn_primary(request: Request, sn_id: int):
 
 
 # ---------- admin: задания ----------
+
 
 @router.get("/jobs/{job_id}")
 def job_page(request: Request, job_id: int):

@@ -1,4 +1,5 @@
 """Пробы: SSH-попытка и проба через прокси."""
+
 import json
 import subprocess
 import time
@@ -10,14 +11,21 @@ def one_probe(ip):
     try:
         result = subprocess.run(
             [
-                "ssh", "-vv",
-                "-o", "ConnectTimeout=5",
-                "-o", "BatchMode=yes",
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "UserKnownHostsFile=/dev/null",
+                "ssh",
+                "-vv",
+                "-o",
+                "ConnectTimeout=5",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "UserKnownHostsFile=/dev/null",
                 f"root@{ip}",
             ],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
     except subprocess.TimeoutExpired:
         return "TIMEOUT (ssh завис)"
@@ -55,9 +63,7 @@ def check_proxy(ip, port, probe_url, timeout=8):
     if not probe_url:
         return None, "probe url not set", None
     proxy = f"http://{ip}:{port}"
-    opener = urllib.request.build_opener(
-        urllib.request.ProxyHandler({"http": proxy, "https": proxy})
-    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
     t0 = time.time()
     try:
         with opener.open(probe_url, timeout=timeout) as resp:

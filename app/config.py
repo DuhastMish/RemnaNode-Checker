@@ -14,4 +14,3 @@ STATUS_HOST = os.environ.get("STATUS_HOST", "").strip().lower()
 # Начальные значения; после первого старта живут в таблице settings
 ENV_ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "").strip()
 ENV_PIN = os.environ.get("PIN", "").strip()
-
