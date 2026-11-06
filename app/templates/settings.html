@@ -57,8 +57,11 @@
       Поля «WG: …» нужны только для режима WireGuard.</p>
   {% endif %}
 
-  {% if sid == 'sources' and last_sync.ts %}
+  {% if sid == 'scheduler' and last_sync.ts %}
     <p class="muted">Последняя синхронизация {{ last_sync.ts|ago }}: {{ last_sync.msg }}</p>
+  {% endif %}
+  {% if sid == 'checks' %}
+    <p class="muted">Эти параметры чекеры получают от панели и применяют без перезапуска.</p>
   {% endif %}
 
   {% if sid == 'egress' %}
@@ -78,7 +81,6 @@
     {% endfor %}
     <div class="actions">
       <button type="submit">Сохранить</button>
-      {% if sid == 'sources' %}<button type="submit" class="secondary" formaction="/settings/sources/test">Проверить подключение</button>{% endif %}
       {% if sid == 'egress' %}<button type="submit" class="secondary" formaction="/settings/egress/test">Проверить (показать внешний IP)</button>{% endif %}
       {% if sid == 'tunnel' %}
         <button type="submit" formaction="/settings/tunnel/provision" onclick="return confirm('Зайти на VPS по SSH, поставить WireGuard и поднять туннель?')">Настроить VPS автоматически</button>
@@ -92,7 +94,7 @@
   </form>
 
   {% if sid == 'tunnel' and values.tunnel_mode == 'wireguard' %}
-    <h2 style="margin-top:20px">Публичный ключ чекера</h2>
+    <h2 style="margin-top:20px">Публичный ключ панели</h2>
     <pre>{{ client_pubkey }}</pre>
     <h2>Блок для /etc/wireguard/wg0.conf на VPS (только для ручного способа)</h2>
     <pre>{{ peer_block }}</pre>
@@ -114,18 +116,6 @@
     </table>
   {% endif %}
 
-  {% if sid == 'export' %}
-    <h2 style="margin-top:20px">Последние отправки</h2>
-    <table>
-      <tr><th>Когда</th><th>Проект</th><th>Нод</th><th>Результат</th></tr>
-      {% for e in export_log %}
-      <tr><td>{{ e.ts|dt }}</td><td>{{ e.project }}</td><td>{{ e.count }}</td><td class="{{ 'ok' if e.ok else 'bad' }}">{{ e.status }}</td></tr>
-      {% else %}
-      <tr><td colspan="4" class="muted">Ещё не отправлялось</td></tr>
-      {% endfor %}
-    </table>
-    <p class="muted">Формат: <code>POST {"vantage":"home","ts":…,"results":[{"ip","name","state","ssh_ok","ssh_status","proxy_ok","proxy_status","latency_ms","ts"}]}</code>, заголовок <code>Authorization: Bearer &lt;токен&gt;</code>. Уходит через исходящий VPS, если он включён.</p>
-  {% endif %}
 </div>
 {% endfor %}
 

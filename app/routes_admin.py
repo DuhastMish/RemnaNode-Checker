@@ -1,11 +1,9 @@
-"""Логин, admin-режим: плитки, нода, задания, терминал. `/` и `/check` диспетчеризуются по режиму."""
-import json
-import time
-
+"""Логин, admin-режим: плитки по источникам, карточка ноды и связывание, задания, терминал.
+`/` и `/check` диспетчеризуются по режиму."""
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from . import auth, checker, db, routes_status, settings, sources, views
+from . import auth, db, jobs, nodes, routes_status, settings, sources, views
 
 router = APIRouter()
 
@@ -46,13 +44,11 @@ def index(request: Request):
     if auth.mode(request) == "status":
         return routes_status.index(request)
     auth.require_admin(request)
-    project = request.query_params.get("project", "remnawave")
-    if project not in ("remnawave", "open60"):
-        project = "remnawave"
-    rows = views.nodes_with_state(project)
-    return views.render(request, "admin.html", project=project, rows=rows, counts=views.counts(rows),
-                        tabs=views.tabs(), running=checker.running, last_sync=sources.last_sync,
-                        refresh=30, title="Ноды")
+    tabs = views.tabs()
+    source_id = views.current_tab(request, tabs)
+    rows = views.nodes_with_state(source_id) if source_id is not None else []
+    return views.render(request, "admin.html", source=sources.get(source_id) if source_id else None,
+                        rows=rows, counts=views.counts(rows), tabs=tabs, refresh=30, title="Ноды")
 
 
 @router.get("/check")
@@ -63,24 +59,27 @@ def check_get(request: Request):
 
 
 @router.post("/check")
-def check_post(request: Request, project: str = Form(""), ips: str = Form(""), target: str = Form("")):
+def check_post(request: Request, source_id: str = Form(""), node_id: str = Form(""), target: str = Form("")):
     if auth.mode(request) == "status":
         return routes_status.check_post(request, target)
     auth.require_admin(request)
-    if target.strip() and not checker.parse_target(target):
-        return RedirectResponse(f"/?project={project}&msg=Введи домен, IP или IP:порт", status_code=303)
     if target.strip():
-        ip_list = [target.strip()]
-    elif ips.strip():
-        ip_list = [x.strip() for x in ips.split(",") if x.strip()]
-    elif project in ("remnawave", "open60"):
-        ip_list = [r["ip"] for r in db.q("SELECT ip FROM nodes WHERE project LIKE ? AND is_active=1", (f"%{project}%",))]
+        t = jobs.target_from_text(target)
+        if not t:
+            return RedirectResponse(f"/?source={source_id}&msg=Введи домен, IP или IP:порт", status_code=303)
+        targets = [t]
+    elif node_id:
+        targets = [jobs.target_for_node(node_id)]
+    elif source_id:
+        ids = [r["node_id"] for r in db.q(
+            "SELECT DISTINCT n.id AS node_id FROM source_nodes sn JOIN nodes n ON n.id = sn.node_id "
+            "WHERE sn.source_id=? AND n.is_active=1", (source_id,))]
+        targets = [jobs.target_for_node(i) for i in ids]
     else:
-        ip_list = None
-    if ip_list is not None and not ip_list:
-        return RedirectResponse(f"/?project={project}&msg=Нет нод для проверки", status_code=303)
-    job_id = db.x("INSERT INTO jobs(ips, requested_by, created_at) VALUES(?,?,?)",
-                  ("*" if ip_list is None else json.dumps(ip_list), "admin", int(time.time())))
+        targets = []
+    job_id = jobs.create(targets, "admin")
+    if not job_id:
+        return RedirectResponse("/?msg=Нет нод для проверки", status_code=303)
     return RedirectResponse(f"/jobs/{job_id}", status_code=303)
 
 
@@ -92,44 +91,90 @@ def check_json(request: Request, job: int):
     return job_json(request, job)
 
 
-# ---------- admin ----------
+# ---------- admin: синхронизация ----------
 
 @router.post("/sync")
-def sync(request: Request):
+def sync(request: Request, source_id: int = Form(...)):
     auth.require_admin(request)
-    msg = sources.sync_nodes()
-    return RedirectResponse(f"/?msg=Синхронизация: {msg}", status_code=303)
+    ok, msg, _changed = sources.sync_source(source_id)
+    return RedirectResponse(f"/?source={source_id}&msg=Синхронизация: {msg if ok else 'ошибка — ' + msg}",
+                            status_code=303)
 
 
-@router.get("/node/{ip}")
-def node_page(request: Request, ip: str):
+@router.post("/sn/{sn_id}/sync")
+def sync_one(request: Request, sn_id: int):
     auth.require_admin(request)
-    node = db.q1("SELECT * FROM nodes WHERE ip=?", (ip,))
+    sn = db.q1("SELECT node_id FROM source_nodes WHERE id=?", (sn_id,))
+    ok, msg, _changed = sources.sync_node(sn_id)
+    still = db.q1("SELECT node_id FROM source_nodes WHERE id=?", (sn_id,))
+    target = f"/node/{still['node_id']}" if still else "/"
+    return RedirectResponse(f"{target}?msg=Синхронизация ноды: {msg if ok else 'ошибка — ' + msg}"
+                            if sn else "/?msg=Нода не найдена", status_code=303)
+
+
+# ---------- admin: карточка цели проверки и связывание ----------
+
+@router.get("/node/{node_id}")
+def node_page(request: Request, node_id: str):
+    auth.require_admin(request)
+    node = db.q1("SELECT n.*, COALESCE(ns.color, 'grey') AS color, ns.updated_at AS checked_at, "
+                 "ns.up_count, ns.down_count FROM nodes n LEFT JOIN node_state ns ON ns.node_id = n.id "
+                 "WHERE n.id=?", (node_id,))
     if not node:
         return RedirectResponse("/?msg=Нода не найдена", status_code=303)
-    hist = [dict(r) for r in db.q("SELECT * FROM results WHERE ip=? ORDER BY id DESC LIMIT 50", (ip,))]
-    return views.render(request, "node.html", node=dict(node), hist=hist, title=ip)
+    hist = [dict(r) for r in db.q(
+        "SELECT r.*, c.name AS checker_name FROM results r LEFT JOIN checkers c ON c.id = r.checker_id "
+        "WHERE r.node_id=? ORDER BY r.id DESC LIMIT 50", (node_id,))]
+    return views.render(
+        request, "node.html", node=dict(node), linked=nodes.linked(node_id), hist=hist,
+        mismatch=nodes.address_mismatch(node_id), same=nodes.same_address_targets(node_id),
+        candidates=nodes.link_candidates(node_id), title=node["address"] or node_id[:8])
 
+
+@router.post("/node/{node_id}/link")
+def node_link(request: Request, node_id: str, other: str = Form("")):
+    auth.require_admin(request)
+    ok = nodes.link(node_id, other)
+    return RedirectResponse(f"/node/{node_id}?msg={'Связано' if ok else 'Не удалось связать'}", status_code=303)
+
+
+@router.post("/sn/{sn_id}/unlink")
+def sn_unlink(request: Request, sn_id: int):
+    auth.require_admin(request)
+    sn = db.q1("SELECT node_id FROM source_nodes WHERE id=?", (sn_id,))
+    if not sn:
+        return RedirectResponse("/?msg=Нода не найдена", status_code=303)
+    nodes.unlink(sn_id)
+    return RedirectResponse(f"/node/{sn['node_id']}?msg=Связь разорвана", status_code=303)
+
+
+@router.post("/sn/{sn_id}/primary")
+def sn_primary(request: Request, sn_id: int):
+    auth.require_admin(request)
+    node_id = nodes.set_primary(sn_id)
+    if not node_id:
+        return RedirectResponse("/?msg=Нода не найдена", status_code=303)
+    return RedirectResponse(f"/node/{node_id}?msg=Основная нода изменена", status_code=303)
+
+
+# ---------- admin: задания ----------
 
 @router.get("/jobs/{job_id}")
 def job_page(request: Request, job_id: int):
     auth.require_admin(request)
-    j = db.q1("SELECT * FROM jobs WHERE id=?", (job_id,))
+    j = jobs.get(job_id)
     if not j:
         return RedirectResponse("/?msg=Задание не найдено", status_code=303)
-    return views.render(request, "job.html", job=dict(j), title=f"Проверка #{job_id}")
+    return views.render(request, "job.html", job=j, title=f"Проверка #{job_id}")
 
 
 @router.get("/jobs/{job_id}/json")
 def job_json(request: Request, job_id: int):
     auth.require_admin(request)
-    j = db.q1("SELECT * FROM jobs WHERE id=?", (job_id,))
+    j = jobs.get(job_id)
     if not j:
         return JSONResponse({"error": "not found"}, status_code=404)
-    res = [dict(r) for r in db.q(
-        "SELECT r.*, n.name, n.flags FROM results r LEFT JOIN nodes n ON n.ip=r.ip "
-        "WHERE r.job_id=? ORDER BY r.id", (job_id,))]
-    return JSONResponse({"status": j["status"], "total": j["total"], "done": j["done"], "results": res})
+    return JSONResponse({"status": j["status"], "targets": j["targets"], "results": jobs.results(job_id)})
 
 
 @router.get("/terminal")

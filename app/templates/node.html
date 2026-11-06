@@ -1,31 +1,82 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="card">
-  <h2>{{ node.name or '—' }} <code>{{ node.ip }}</code></h2>
-  <div class="muted">проект: {{ node.project }}{% if node.fresh_port %} · порт прокси {{ node.fresh_port }}{% endif %}
-    {% if node.flags %} · {{ node.flags }}{% endif %} · {{ 'активна' if node.is_active else 'неактивна' }}
-    · обновлена {{ node.updated_at|ago }}</div>
+  <h2><span class="dot {{ node.color }}"></span><code>{{ node.address or '—' }}</code>{% if node.fresh_port %} :{{ node.fresh_port }}{% endif %}</h2>
+  <div class="muted">
+    {{ COLOR_LABEL[node.color] }}{% if node.checked_at %} · {{ node.checked_at|ago }}{% endif %}
+    · {{ 'активна' if node.is_active else 'неактивна' }} · ревизия {{ node.rev }} · изменена {{ node.updated_at|ago }}
+    <br>node_id <code>{{ node.id }}</code>
+  </div>
+  {% if mismatch %}<p class="bad">Адреса связанных нод разошлись — проверяется адрес основной ноды.</p>{% endif %}
   <div class="actions">
-    <form method="post" action="/check"><input type="hidden" name="ips" value="{{ node.ip }}"><button type="submit">Проверить сейчас</button></form>
-    <a class="btn secondary" href="/">← к списку</a>
+    <form method="post" action="/check"><input type="hidden" name="node_id" value="{{ node.id }}"><button type="submit">Проверить сейчас</button></form>
+    <a class="btn secondary" href="/?source={{ linked[0].source_id if linked else '' }}">← к списку</a>
   </div>
 </div>
+
+<div class="card">
+  <h2>Ноды источников{% if linked|length > 1 %} (связаны — проверка одна){% endif %}</h2>
+  <table>
+    <tr><th>Источник</th><th>Имя</th><th>Адрес</th><th>Порт прокси</th><th>Флаги</th><th>Видна в источнике</th><th></th></tr>
+    {% for sn in linked %}
+    <tr>
+      <td>{{ sn.source_name }}{% if sn.is_primary %} <span class="badge">основная</span>{% endif %}</td>
+      <td>{{ sn.name or '—' }}</td>
+      <td><code>{{ sn.address }}</code>{% if sn.address != node.address %} <span class="bad">≠</span>{% endif %}</td>
+      <td>{{ sn.fresh_port or '—' }}</td>
+      <td class="muted">{{ sn.flags or '—' }}{% if not sn.is_active %} · неактивна{% endif %}</td>
+      <td class="muted">{{ sn.last_seen_at|ago }}</td>
+      <td>
+        <div class="actions" style="margin:0">
+          <form method="post" action="/sn/{{ sn.id }}/sync"><button type="submit" class="secondary">Синхронизировать ноду</button></form>
+          {% if linked|length > 1 %}
+            {% if not sn.is_primary %}<form method="post" action="/sn/{{ sn.id }}/primary"><button type="submit" class="secondary">Сделать основной</button></form>{% endif %}
+            <form method="post" action="/sn/{{ sn.id }}/unlink" onsubmit="return confirm('Отделить эту ноду в собственную проверку?')"><button type="submit" class="secondary">Отвязать</button></form>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h2 style="margin-top:20px">Связать с другой нодой</h2>
+  <p class="muted">Если это одна физическая нода в разных источниках — свяжи их: проверка будет одна, состояние общее,
+    а на вкладках источников ноды останутся отдельными. Адрес для проверки берётся у основной ноды этой карточки.</p>
+  {% if same %}
+  <p>Тот же адрес у:</p>
+  {% for c in same %}
+    <form method="post" action="/node/{{ node.id }}/link" style="margin-bottom:6px">
+      <input type="hidden" name="other" value="{{ c.id }}">
+      <button type="submit" class="secondary">Связать</button> {{ c.label }}
+    </form>
+  {% endfor %}
+  {% endif %}
+  <form method="post" action="/node/{{ node.id }}/link" style="display:flex;gap:8px">
+    <select name="other" required>
+      <option value="">— выбрать ноду —</option>
+      {% for c in candidates %}<option value="{{ c.id }}">{{ c.label }} · {{ c.address }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="secondary" style="white-space:nowrap">Связать</button>
+  </form>
+</div>
+
 <div class="card">
   <h2>История (последние {{ hist|length }})</h2>
   <table>
-    <tr><th></th><th>Время</th><th>SSH</th><th>Прокси</th><th>Задержка</th><th>Точка</th><th>Задание</th></tr>
+    <tr><th></th><th>Время</th><th>Чекер</th><th>Адрес</th><th>SSH</th><th>Прокси</th><th>Задержка</th><th>Задание</th></tr>
     {% for h in hist %}
-    <tr>
+    <tr{% if h.stale %} class="muted" title="по устаревшей ревизии — в состоянии не учтён"{% endif %}>
       <td><span class="dot {{ h.state }}"></span></td>
       <td>{{ h.ts|dt }} <span class="muted">({{ h.ts|ago }})</span></td>
+      <td>{{ h.checker_name or '—' }}</td>
+      <td><code>{{ h.target_address }}</code>{% if h.stale %} <span class="badge">устар.</span>{% endif %}</td>
       <td>{{ h.ssh_status }}</td>
       <td>{{ h.proxy_status or '—' }}</td>
       <td>{% if h.latency_ms is not none %}{{ h.latency_ms }} мс{% else %}—{% endif %}</td>
-      <td class="muted">{{ h.vantage }}</td>
       <td>{% if h.job_id %}<a href="/jobs/{{ h.job_id }}">#{{ h.job_id }}</a>{% else %}<span class="muted">план</span>{% endif %}</td>
     </tr>
     {% else %}
-    <tr><td colspan="7" class="muted">Проверок ещё не было</td></tr>
+    <tr><td colspan="8" class="muted">Проверок ещё не было</td></tr>
     {% endfor %}
   </table>
 </div>

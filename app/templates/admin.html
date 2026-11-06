@@ -2,46 +2,51 @@
 {% block content %}
 <div class="tabs">
   {% for t in tabs %}
-  <a href="/?project={{ t.key }}" class="{{ 'active' if t.key == project }}">
+  <a href="/?source={{ t.key }}" class="{{ 'active' if source and t.key == source.id }}">
     {{ t.label }}
     <span class="muted">{{ t.counts.total }}</span>
     <span class="dot green"></span>{{ t.counts.green }}
-    <span class="dot yellow"></span>{{ t.counts.yellow }}
+    <span class="dot orange"></span>{{ t.counts.orange }}
     <span class="dot red"></span>{{ t.counts.red }}
   </a>
   {% endfor %}
 </div>
 
+{% if not source %}
+<p class="muted">Источников пока нет. Добавь панель Remnawave или Open60 на странице <a href="/sources">Источники</a>.</p>
+{% else %}
 <div class="summary">
   <span><span class="dot green"></span>работает</span>
-  <span><span class="dot yellow"></span>жив, прокси нет (ТСПУ / squid)</span>
-  <span><span class="dot red"></span>недоступен</span>
+  <span><span class="dot orange"></span>недоступна у части чекеров</span>
+  <span><span class="dot red"></span>недоступна у всех</span>
   <span><span class="dot grey"></span>нет свежих данных</span>
-  {% if running.active %}
-    <span class="muted">идёт проверка: {{ running.done }}/{{ running.total }}</span>
-  {% endif %}
   <form method="post" action="/check">
-    <input type="hidden" name="project" value="{{ project }}">
+    <input type="hidden" name="source_id" value="{{ source.id }}">
     <input type="text" name="target" placeholder="домен, IP или IP:порт" style="width:200px">
     <button type="submit">Проверить</button>
   </form>
-  <form method="post" action="/sync"><button type="submit" class="secondary" title="{{ last_sync.msg }}">Обновить список</button></form>
+  <form method="post" action="/sync">
+    <input type="hidden" name="source_id" value="{{ source.id }}">
+    <button type="submit" class="secondary" title="{{ source.last_sync_msg }}">Синхронизировать все</button>
+  </form>
 </div>
+<p class="muted" style="margin-top:-8px">
+  Синхронизация {{ source.last_sync_at|ago }}{% if source.last_sync_msg %}: <span class="{{ 'ok' if source.last_sync_ok else 'bad' }}">{{ source.last_sync_msg }}</span>{% endif %}
+</p>
 
-{% if not rows %}
-<p class="muted">Нод нет. Заполни токены в <a href="/settings#sources">настройках</a> и нажми «Обновить список».
-  {% if last_sync.msg %}<br>Последняя синхронизация: {{ last_sync.msg }}{% endif %}</p>
-{% endif %}
+{% if not rows %}<p class="muted">В этом источнике нод нет.</p>{% endif %}
 
 <div class="grid">
 {% for r in rows %}
-  <a class="tile {{ r.color }}" href="/node/{{ r.ip }}">
-    <div class="name">{{ r.name or '—' }}</div>
-    <div class="sub"><code>{{ r.ip }}</code>{% if r.fresh_port %} :{{ r.fresh_port }}{% endif %}</div>
-    <div class="sub">{{ r.ssh_status or '' }} {{ r.proxy_status or '' }}</div>
-    <div class="sub">{{ r.checked_at|ago }}{% if not r.is_active %} · неактивна{% endif %}</div>
+  <a class="tile {{ r.color }}" href="/node/{{ r.node_id }}">
+    <div class="name">{{ r.name or '—' }}{% if r.linked_count > 1 %}<span class="badge" title="связана с нодами других источников">связь ×{{ r.linked_count }}</span>{% endif %}</div>
+    <div class="sub"><code>{{ r.address }}</code>{% if r.fresh_port %} :{{ r.fresh_port }}{% endif %}</div>
+    <div class="sub">{{ COLOR_LABEL[r.color] }}{% if r.checked_at %} · {{ r.checked_at|ago }}{% endif %}{% if not r.is_active %} · неактивна{% endif %}</div>
     {% if r.flags %}<div class="flags">{{ r.flags }}</div>{% endif %}
+    {% if r.mismatch %}<div class="warn">адрес отличается от основной ноды ({{ r.target_address }})</div>
+    {% elif r.dup and r.linked_count == 1 %}<div class="warn">такой адрес есть у другой ноды — связать?</div>{% endif %}
   </a>
 {% endfor %}
 </div>
+{% endif %}
 {% endblock %}

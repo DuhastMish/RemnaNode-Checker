@@ -9,21 +9,16 @@ from . import config, db
 # (section, key, label, type, default, help)
 # type: int | str | bool | secret
 FIELDS = [
-    # --- планировщик ---
-    ("scheduler", "sync_interval_min", "Синхронизация нод из панелей, мин", "int", 10, ""),
-    ("scheduler", "check_interval_min", "Плановая проверка всех нод, мин", "int", 5, ""),
-    ("scheduler", "jobs_poll_sec", "Опрос очереди ручных заданий, с", "int", 3, ""),
+    # --- панель ---
+    ("scheduler", "sync_interval_min", "Синхронизация нод из источников, мин", "int", 10, ""),
     ("scheduler", "retention_days", "Хранить историю результатов, дней", "int", 30, ""),
-    ("scheduler", "max_workers", "Воркеров в пуле", "int", 15, "сколько нод проверяется одновременно"),
-    ("scheduler", "probes", "Попыток SSH на ноду", "int", 2, ""),
-    ("scheduler", "proxy_timeout_sec", "Таймаут пробы через прокси, с", "int", 8, ""),
     ("scheduler", "status_cache_sec", "Кэш результата для status-страницы, с", "int", 60, "повторная ручная проверка раньше этого срока отдаёт кэш"),
-    # --- источники ---
-    ("sources", "remnawave_url", "Remnawave URL", "str", "", "например https://panel.example.com"),
-    ("sources", "remnawave_token", "Remnawave токен", "secret", "", ""),
-    ("sources", "open60_url", "Open60 URL", "str", "", "например https://api.example.com"),
-    ("sources", "open60_token", "Open60 ADMIN_TOKEN", "secret", "", ""),
-    ("sources", "open60_probe_url", "URL пробы через прокси", "str", "", "ответ должен содержать ip ноды, например https://api.example.com/probe"),
+    # --- параметры проверок: уходят чекерам в config ---
+    ("checks", "check_interval_min", "Плановая проверка всех нод, мин", "int", 5, "каждый чекер проверяет все активные ноды с этим интервалом"),
+    ("checks", "max_workers", "Воркеров в пуле чекера", "int", 15, "сколько нод чекер проверяет одновременно"),
+    ("checks", "probes", "Попыток SSH на ноду", "int", 2, ""),
+    ("checks", "proxy_timeout_sec", "Таймаут пробы через прокси, с", "int", 8, ""),
+    ("checks", "proxy_probe_url", "URL пробы через прокси", "str", "", "ответ должен быть {\"ok\": true, \"ip\": \"<ip ноды>\"}, например https://api.example.com/probe"),
     # --- туннель ---
     ("tunnel", "tunnel_mode", "Транспорт", "str", "ssh", "ssh — обратный SSH-туннель, провайдеры не режут; wireguard — быстрее, но ТСПУ блокирует"),
     ("tunnel", "wg_vps_host", "VPS: IP для SSH", "str", "", "обычно тот же, что исходящий"),
@@ -37,10 +32,10 @@ FIELDS = [
     ("tunnel", "wg_endpoint", "WG: адрес VPS (IP:порт)", "str", "", "заполнится автонастройкой; или вручную 1.2.3.4:51820"),
     ("tunnel", "wg_server_pubkey", "WG: публичный ключ VPS", "str", "", "заполнится автонастройкой; или содержимое server.pub"),
     ("tunnel", "wg_server_addr", "WG: адрес VPS в туннеле", "str", "10.8.0.1", ""),
-    ("tunnel", "wg_client_addr", "WG: адрес чекера в туннеле", "str", "10.8.0.2", ""),
+    ("tunnel", "wg_client_addr", "WG: адрес панели в туннеле", "str", "10.8.0.2", ""),
     ("tunnel", "wg_keepalive", "WG: PersistentKeepalive, с", "int", 25, "обязателен за NAT провайдера"),
-    ("tunnel", "wg_client_privkey", "WG: приватный ключ чекера", "secret", "", "генерируется автоматически"),
-    ("tunnel", "wg_client_pubkey", "WG: публичный ключ чекера", "str", "", ""),
+    ("tunnel", "wg_client_privkey", "WG: приватный ключ панели", "secret", "", "генерируется автоматически"),
+    ("tunnel", "wg_client_pubkey", "WG: публичный ключ панели", "str", "", ""),
     # --- исходящий VPS ---
     ("egress", "egress_type", "Тип", "str", "none", "none | ssh | socks5 | http"),
     ("egress", "egress_host", "Хост", "str", "", ""),
@@ -48,12 +43,6 @@ FIELDS = [
     ("egress", "egress_user", "Логин", "str", "", ""),
     ("egress", "egress_password", "Пароль", "secret", "", ""),
     ("egress", "egress_local_port", "Локальный порт SOCKS (для ssh)", "int", 1080, ""),
-    # --- экспорт ---
-    ("export", "export_enabled", "Отправлять результаты в бэкенды", "bool", False, ""),
-    ("export", "export_remnawave_url", "Remnawave: URL приёма", "str", "", "POST JSON после каждой проверки"),
-    ("export", "export_remnawave_token", "Remnawave: токен", "secret", "", "Authorization: Bearer"),
-    ("export", "export_open60_url", "Open60: URL приёма", "str", "", ""),
-    ("export", "export_open60_token", "Open60: токен", "secret", "", ""),
     # --- доступ ---
     ("access", "admin_token", "Admin-токен", "secret", "", "пусто — не менять"),
     ("access", "pin", "PIN для status-страницы", "secret", "", "пусто — не менять"),
@@ -62,11 +51,10 @@ FIELDS = [
 ]
 
 SECTIONS = [
-    ("scheduler", "Планировщик"),
-    ("sources", "Источники нод"),
-    ("tunnel", "Туннель чекер ↔ VPS"),
+    ("scheduler", "Панель"),
+    ("checks", "Проверки (параметры для чекеров)"),
+    ("tunnel", "Туннель панель ↔ VPS"),
     ("egress", "Исходящий VPS"),
-    ("export", "Экспорт статусов"),
     ("access", "Доступ"),
 ]
 

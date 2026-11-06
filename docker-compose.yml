@@ -18,7 +18,7 @@ services:
     network_mode: host
     # TTYD_IFACE=lo  — режим SSH-туннеля: ttyd слушает 127.0.0.1, наружу уходит через ssh -R
     # TTYD_IFACE=wg0 — режим WireGuard: слушает только на туннельном интерфейсе
-    # Внутри открывает ssh на сам хост чекера (127.0.0.1 = хост, т.к. network_mode: host).
+    # Внутри открывает ssh на сам хост панели (127.0.0.1 = хост, т.к. network_mode: host).
     command: >
       ttyd -p 7681 -i ${TTYD_IFACE:-lo} -b /ttyd -W
       ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${TTYD_USER:?set TTYD_USER in .env}@127.0.0.1

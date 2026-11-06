@@ -2,26 +2,26 @@
 {% block content %}
 <div class="tabs">
   {% for t in tabs %}
-  <a href="/?project={{ t.key }}" class="{{ 'active' if t.key == project }}">
+  <a href="/?source={{ t.key }}" class="{{ 'active' if t.key == source_id }}">
     {{ t.label }} <span class="muted">{{ t.counts.total }}</span>
     <span class="dot green"></span>{{ t.counts.green }}
-    <span class="dot yellow"></span>{{ t.counts.yellow }}
+    <span class="dot orange"></span>{{ t.counts.orange }}
     <span class="dot red"></span>{{ t.counts.red }}
   </a>
   {% endfor %}
 </div>
 <div class="summary">
   <span><span class="dot green"></span>работает</span>
-  <span><span class="dot yellow"></span>частично</span>
-  <span><span class="dot red"></span>недоступен из РФ</span>
+  <span><span class="dot orange"></span>недоступна у части чекеров</span>
+  <span><span class="dot red"></span>недоступна</span>
   <span><span class="dot grey"></span>нет данных</span>
 </div>
 <div class="grid">
 {% for r in rows %}
   <div class="tile {{ r.color }}">
     <div class="name">{{ r.name }}</div>
-    <div class="sub"><code>{{ r.ip }}</code></div>
-    <div class="sub">{{ COLOR_LABEL[r.color] }} · {{ r.checked_at|ago }}</div>
+    <div class="sub"><code>{{ r.address }}</code></div>
+    <div class="sub">{{ COLOR_LABEL[r.color] }}{% if r.checked_at %} · {{ r.checked_at|ago }}{% endif %}</div>
   </div>
 {% else %}
   <p class="muted">Данных пока нет</p>

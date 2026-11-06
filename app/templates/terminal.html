@@ -1,5 +1,5 @@
 {% extends "base.html" %}
 {% block content %}
-<p class="muted">Терминал хоста чекера (ttyd → ssh на хост). Спросит пароль пользователя — это второй рубеж, так задумано.</p>
+<p class="muted">Терминал хоста панели (ttyd → ssh на хост). Спросит пароль пользователя — это второй рубеж, так задумано.</p>
 <iframe src="{{ ttyd_url }}" style="width:100%;height:75vh;border:1px solid var(--border);border-radius:8px;background:#000"></iframe>
 {% endblock %}

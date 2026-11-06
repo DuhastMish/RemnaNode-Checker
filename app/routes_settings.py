@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import auth, egress, exporter, scheduler, settings, sources, tunnel, views
+from . import auth, egress, scheduler, settings, tunnel, views
 
 router = APIRouter()
 
@@ -23,8 +23,8 @@ def settings_page(request: Request):
         sections=settings.SECTIONS, fields=settings.FIELDS, values=values, meta=settings.META,
         tunnel=tunnel.ui_status(), tunnel_apply=tunnel.last_apply, tunnel_provision=tunnel.last_provision, peer_block=tunnel.peer_block(),
         client_pubkey=settings.get("wg_client_pubkey"), tasks=scheduler.info(),
-        egress_alive=egress.alive(), egress_error=egress.last_error, export_log=list(exporter.log),
-        last_sync=sources.last_sync, history=settings.history(15),
+        egress_alive=egress.alive(), egress_error=egress.last_error,
+        last_sync=scheduler.last_sync, history=settings.history(15),
     )
 
 
@@ -108,18 +108,6 @@ def tunnel_genkey(request: Request):
     auth.require_admin(request)
     tunnel.regen_keys()
     return _back("tunnel", "Ключи перегенерированы. Обнови [Peer] на VPS и нажми «Применить»")
-
-
-@router.post("/settings/sources/test")
-def sources_test(request: Request):
-    auth.require_admin(request)
-    parts = []
-    for label, fn in (("Remnawave", sources.fetch_remnawave), ("Open60", sources.fetch_open60)):
-        try:
-            parts.append(f"{label}: {len(fn())} нод")
-        except Exception as e:
-            parts.append(f"{label}: ошибка — {str(e)[:80]}")
-    return _back("sources", " | ".join(parts))
 
 
 @router.post("/settings/egress/test")

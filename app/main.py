@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 
-from . import auth, db, egress, routes_admin, routes_settings, scheduler, settings, tunnel
+from . import auth, db, egress, routes_admin, routes_settings, routes_sources, scheduler, settings, tunnel
 
 
 @asynccontextmanager
@@ -34,3 +34,4 @@ async def _auth_required(request: Request, exc: auth.AuthRequired):
 
 app.include_router(routes_admin.router)
 app.include_router(routes_settings.router)
+app.include_router(routes_sources.router)

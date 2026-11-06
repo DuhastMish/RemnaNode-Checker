@@ -2,15 +2,14 @@
 {% block content %}
 <div class="card">
   <h2>Проверка #{{ job.id }} <span class="muted" id="st">{{ job.status }}</span></h2>
-  <div class="muted">создана {{ job.created_at|dt }} · запросил: {{ job.requested_by }}</div>
-  <div class="progress"><div id="bar"></div></div>
-  <div id="cnt" class="muted">{{ job.done }} / {{ job.total }}</div>
+  <div class="muted">создана {{ job.created_at|dt }} · запросил: {{ job.requested_by }} · целей: {{ job.targets|length }}</div>
   <div class="actions"><a class="btn secondary" href="/">← к списку</a></div>
 </div>
 <div class="card">
   <table id="tbl">
-    <tr><th></th><th>IP</th><th>Имя</th><th>SSH</th><th>Прокси</th><th>Задержка</th></tr>
+    <tr><th></th><th>Адрес</th><th>Чекер</th><th>SSH</th><th>Прокси</th><th>Задержка</th></tr>
   </table>
+  <p class="muted" id="empty">Результатов пока нет — задание ждёт чекеры.</p>
 </div>
 <script>
 const id = {{ job.id }};
@@ -19,13 +18,13 @@ async function tick(){
   const r = await fetch('/jobs/'+id+'/json'); if(!r.ok) return;
   const j = await r.json();
   document.getElementById('st').textContent = j.status;
-  document.getElementById('cnt').textContent = j.done+' / '+j.total;
-  document.getElementById('bar').style.width = (j.total? Math.round(100*j.done/j.total):0)+'%';
   const t = document.getElementById('tbl');
   while(t.rows.length>1) t.deleteRow(1);
+  document.getElementById('empty').style.display = j.results.length ? 'none' : '';
   for(const x of j.results){
     const tr = t.insertRow();
-    tr.innerHTML = '<td><span class="dot '+esc(x.state)+'"></span></td><td><a href="/node/'+esc(x.ip)+'"><code>'+esc(x.ip)+'</code></a></td><td>'+esc(x.name)+'</td><td>'+esc(x.ssh_status)+'</td><td>'+esc(x.proxy_status||'—')+'</td><td>'+(x.latency_ms==null?'—':x.latency_ms+' мс')+'</td>';
+    const addr = x.node_id ? '<a href="/node/'+esc(x.node_id)+'"><code>'+esc(x.target_address)+'</code></a>' : '<code>'+esc(x.target_address)+'</code>';
+    tr.innerHTML = '<td><span class="dot '+esc(x.state)+'"></span></td><td>'+addr+'</td><td>'+esc(x.checker_name)+'</td><td>'+esc(x.ssh_status)+'</td><td>'+esc(x.proxy_status||'—')+'</td><td>'+(x.latency_ms==null?'—':x.latency_ms+' мс')+'</td>';
   }
   if(j.status!=='done') setTimeout(tick, 2000);
 }

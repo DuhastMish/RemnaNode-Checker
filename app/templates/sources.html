@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+{% for s in sources %}
+<div class="card" id="s{{ s.id }}">
+  <h2>{{ s.name }} <span class="badge">{{ types[s.type] }}</span> <span class="muted" style="font-size:14px">{{ s.count }} нод</span></h2>
+  <p class="muted">Синхронизация {{ s.last_sync_at|ago }}{% if s.last_sync_msg %}: <span class="{{ 'ok' if s.last_sync_ok else 'bad' }}">{{ s.last_sync_msg }}</span>{% endif %}</p>
+  <form method="post" action="/sources/{{ s.id }}">
+    <div class="row"><label>Имя вкладки</label><input name="name" value="{{ s.name }}" required></div>
+    <div class="row"><label>URL панели</label><input name="url" value="{{ s.url }}" required></div>
+    <div class="row"><label>Токен API</label><input type="password" name="token" placeholder="••••••••  (пусто — не менять)" autocomplete="new-password"></div>
+    <div class="row"><label>Экспорт: URL приёма<small>POST JSON с состоянием нод этого источника</small></label><input name="export_url" value="{{ s.export_url }}"></div>
+    <div class="row"><label>Экспорт: токен<small>Authorization: Bearer</small></label><input type="password" name="export_token" placeholder="••••••••  (пусто — не менять)" autocomplete="new-password"></div>
+    <div class="actions">
+      <button type="submit">Сохранить</button>
+      <button type="submit" class="secondary" formaction="/sources/{{ s.id }}/test">Проверить подключение</button>
+      <button type="submit" class="secondary" formaction="/sources/{{ s.id }}/sync">Синхронизировать все</button>
+      <a class="btn secondary" href="/?source={{ s.id }}">Открыть вкладку</a>
+      <button type="submit" class="danger" formaction="/sources/{{ s.id }}/delete" onclick="return confirm('Удалить источник «{{ s.name }}» и все его ноды?')">Удалить</button>
+    </div>
+  </form>
+</div>
+{% endfor %}
+
+<div class="card" id="new">
+  <h2>Добавить источник</h2>
+  <form method="post" action="/sources">
+    <div class="row"><label>Тип</label>
+      <select name="type">{% for k, v in types.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+    <div class="row"><label>Имя вкладки</label><input name="name" placeholder="например, Основная панель" required></div>
+    <div class="row"><label>URL панели<small>Remnawave: адрес панели; Open60: адрес API</small></label><input name="url" placeholder="https://panel.example.com" required></div>
+    <div class="row"><label>Токен API<small>Remnawave: API-токен; Open60: ADMIN_TOKEN</small></label><input type="password" name="token" required autocomplete="new-password"></div>
+    <div class="row"><label>Экспорт: URL приёма<small>необязательно</small></label><input name="export_url"></div>
+    <div class="row"><label>Экспорт: токен</label><input type="password" name="export_token" autocomplete="new-password"></div>
+    <div class="actions"><button type="submit">Добавить и синхронизировать</button></div>
+  </form>
+</div>
+{% endblock %}

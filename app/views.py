@@ -1,16 +1,17 @@
 """Общее для роутов: шаблоны, выборка нод с текущим состоянием, фильтры."""
-import hashlib
 import os
 import time
 
 from fastapi.templating import Jinja2Templates
 
-from . import auth, db, settings
+from . import auth, db, nodes
 
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
-COLORS = ("green", "yellow", "red", "grey")
-COLOR_LABEL = {"green": "работает", "yellow": "жив, прокси нет", "red": "недоступен", "grey": "нет данных"}
+# цвета агрегата (плитка); yellow встречается только в отдельных результатах чекеров
+COLORS = ("green", "orange", "red", "grey")
+COLOR_LABEL = {"green": "работает", "orange": "недоступна у части чекеров", "red": "недоступна",
+               "grey": "нет данных", "yellow": "жив, прокси нет"}
 
 
 def ago(ts):
@@ -66,38 +67,26 @@ def render(request, name, **ctx):
     return templates.TemplateResponse(request, name, ctx)
 
 
-def nid(ip: str) -> str:
-    """Публичный идентификатор ноды для status-страницы (IP не светим)."""
-    return hashlib.sha1(ip.encode()).hexdigest()[:12]
-
-
-def ip_by_nid(n: str):
-    for r in db.q("SELECT ip FROM nodes"):
-        if nid(r["ip"]) == n:
-            return r["ip"]
-    return None
-
-
-def nodes_with_state(project=None):
+def nodes_with_state(source_id=None):
+    """Ноды источников (плитки) с агрегированным состоянием их цели проверки."""
     sql = (
-        "SELECT n.*, r.state, r.ts AS checked_at, r.ssh_status, r.proxy_status, r.latency_ms "
-        "FROM nodes n LEFT JOIN results r ON r.id = "
-        "(SELECT id FROM results WHERE ip = n.ip ORDER BY id DESC LIMIT 1)"
+        "SELECT sn.id AS sn_id, sn.source_id, sn.external_id, sn.name, sn.address, sn.flags, sn.is_active, "
+        "sn.is_primary, n.id AS node_id, n.address AS target_address, n.fresh_port, n.rev, "
+        "COALESCE(ns.color, 'grey') AS color, ns.updated_at AS checked_at, ns.up_count, ns.down_count, "
+        "(SELECT COUNT(*) FROM source_nodes x WHERE x.node_id = n.id) AS linked_count "
+        "FROM source_nodes sn JOIN nodes n ON n.id = sn.node_id "
+        "LEFT JOIN node_state ns ON ns.node_id = n.id"
     )
     args = ()
-    if project:
-        sql += " WHERE n.project LIKE ?"
-        args = (f"%{project}%",)
-    sql += " ORDER BY n.name, n.ip"
+    if source_id is not None:
+        sql += " WHERE sn.source_id = ?"
+        args = (source_id,)
+    sql += " ORDER BY sn.name, sn.address"
     rows = [dict(r) for r in db.q(sql, args)]
-    stale_after = settings.get("check_interval_min") * 60 * 3
-    now = time.time()
+    dups = nodes.duplicate_addresses()
     for r in rows:
-        if not r["state"] or (now - (r["checked_at"] or 0)) > stale_after:
-            r["color"] = "grey"
-        else:
-            r["color"] = r["state"]
-        r["nid"] = nid(r["ip"])
+        r["dup"] = r["address"] in dups
+        r["mismatch"] = r["linked_count"] > 1 and r["address"] != r["target_address"]
     return rows
 
 
@@ -111,7 +100,18 @@ def counts(rows):
 
 def tabs():
     out = []
-    for key, label in (("remnawave", "Remnawave"), ("open60", "Open60")):
-        rows = nodes_with_state(key)
-        out.append({"key": key, "label": label, "counts": counts(rows)})
+    for s in db.q("SELECT id, name FROM sources ORDER BY id"):
+        out.append({"key": s["id"], "label": s["name"], "counts": counts(nodes_with_state(s["id"]))})
     return out
+
+
+def current_tab(request, tabs_list):
+    """id выбранного источника из ?source=, по умолчанию — первый."""
+    try:
+        sid = int(request.query_params.get("source", ""))
+    except ValueError:
+        sid = None
+    keys = [t["key"] for t in tabs_list]
+    if sid in keys:
+        return sid
+    return keys[0] if keys else None

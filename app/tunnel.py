@@ -1,4 +1,4 @@
-"""WireGuard-туннель чекер → VPS. Контейнер управляет интерфейсом сам
+"""WireGuard-туннель панель → VPS. Контейнер управляет интерфейсом сам
 (network_mode: host + NET_ADMIN), конфиг лежит в /etc/wireguard/wg0.conf."""
 import os
 import re
@@ -60,7 +60,7 @@ def build_conf():
 def peer_block():
     return (
         "[Peer]\n"
-        "# чекер (nodecheck)\n"
+        "# панель (nodecheck)\n"
         f"PublicKey = {settings.get('wg_client_pubkey')}\n"
         f"AllowedIPs = {settings.get('wg_client_addr')}/32\n"
     )
@@ -276,7 +276,7 @@ def provision_async():
 
 
 # ---------- режим SSH: обратный туннель ssh -R ----------
-# Чекер держит SSH-сессию к VPS и пробрасывает на него свои порты 8000 (приложение)
+# Панель держит SSH-сессию к VPS и пробрасывает на него свои порты 8000 (приложение)
 # и 7681 (ttyd). На VPS порты открываются на ssh_bind_addr — адресе, который видит
 # nginx в docker. Провайдерские DPI SSH не режут, в отличие от WireGuard.
 
