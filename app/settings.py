@@ -1,6 +1,5 @@
 """Настройки в таблице settings: кэш в памяти, история изменений, дефолты."""
 
-import json
 import secrets
 import threading
 import time
@@ -8,7 +7,7 @@ import time
 from . import config, db
 
 # (section, key, label, type, default, help)
-# type: int | str | bool | secret
+# типы полей: int | str | bool | secret
 FIELDS = [
     # --- панель ---
     ("scheduler", "sync_interval_min", "Синхронизация нод из источников, мин", "int", 10, ""),

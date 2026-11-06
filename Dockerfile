@@ -2,7 +2,7 @@ FROM tsl0922/ttyd:1.7.7 AS ttyd
 
 FROM python:3.12-slim-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      wireguard-tools iproute2 iputils-ping openssh-client sshpass procps ca-certificates \
+      wireguard-tools iproute2 iputils-ping openssh-client sshpass ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=ttyd /usr/bin/ttyd /usr/bin/ttyd
 WORKDIR /app
