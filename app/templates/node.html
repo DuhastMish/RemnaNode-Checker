@@ -60,6 +60,24 @@
   </form>
 </div>
 
+{% if incidents %}
+<div class="card">
+  <h2>Инциденты</h2>
+  <table>
+    <tr><th>#</th><th>Открыт</th><th>Закрыт</th><th>Цвет</th><th>Адрес при открытии</th></tr>
+    {% for i in incidents %}
+    <tr>
+      <td>{{ i.id }}</td>
+      <td>{{ i.opened_at|dt }}</td>
+      <td>{% if i.closed_at %}{{ i.closed_at|dt }}{% else %}<span class="bad">открыт</span>{% endif %}</td>
+      <td><span class="dot {{ i.color }}"></span>{{ COLOR_LABEL[i.color] }}</td>
+      <td><code>{{ i.address_at_open }}</code>{% if i.address_at_open != node.address %} <span class="muted">→ {{ node.address }}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
 <div class="card">
   <h2>История (последние {{ hist|length }})</h2>
   <table>

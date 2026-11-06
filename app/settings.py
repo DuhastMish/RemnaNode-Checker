@@ -50,6 +50,16 @@ FIELDS = [
         "",
         'ответ должен быть {"ok": true, "ip": "<ip ноды>"}, например https://api.example.com/probe',
     ),
+    # --- алерты ---
+    (
+        "alerts",
+        "alert_webhook_url",
+        "Вебхук: URL",
+        "str",
+        "",
+        "POST JSON при открытии/закрытии инцидента, смене цвета и пропаже/возврате чекера; пусто — не слать",
+    ),
+    ("alerts", "alert_webhook_token", "Вебхук: токен", "secret", "", "Authorization: Bearer; необязательно"),
     # --- туннель ---
     (
         "tunnel",
@@ -112,6 +122,7 @@ FIELDS = [
 SECTIONS = [
     ("scheduler", "Панель"),
     ("checks", "Проверки (параметры для чекеров)"),
+    ("alerts", "Алерты"),
     ("tunnel", "Туннель панель ↔ VPS"),
     ("egress", "Исходящий VPS"),
     ("access", "Доступ"),

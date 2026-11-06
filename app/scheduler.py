@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import db, egress, settings, sources, state, tunnel
+from . import db, egress, export, jobs, settings, sources, state, tunnel
 
 sched = BackgroundScheduler(
     timezone="UTC",
@@ -39,6 +39,8 @@ TASKS = {
     "sync_nodes": ("Синхронизация нод из источников", sync_nodes),
     "cleanup": ("Очистка истории", cleanup),
     "recompute_state": ("Пересчёт состояния нод (offline-чекеры, устаревание)", state.recompute_all),
+    "finish_jobs": ("Завершение ручных заданий по таймауту", jobs.finish_due),
+    "export": ("Экспорт состояния в источники", export.export_all),
     "egress_watchdog": ("Исходящий VPS (watchdog)", egress.watchdog),
     "tunnel_watchdog": ("Туннель к VPS (watchdog)", tunnel.watchdog),
 }
@@ -61,6 +63,8 @@ def _triggers():
         "sync_nodes": IntervalTrigger(minutes=max(1, settings.get("sync_interval_min"))),
         "cleanup": IntervalTrigger(days=1),
         "recompute_state": IntervalTrigger(seconds=30),
+        "finish_jobs": IntervalTrigger(seconds=5),
+        "export": IntervalTrigger(minutes=max(1, settings.get("check_interval_min"))),
         "egress_watchdog": IntervalTrigger(seconds=30),
         "tunnel_watchdog": IntervalTrigger(seconds=30),
     }
@@ -68,7 +72,15 @@ def _triggers():
 
 def setup():
     now = datetime.now(timezone.utc)
-    first = {"sync_nodes": 5, "cleanup": 60, "recompute_state": 30, "egress_watchdog": 15, "tunnel_watchdog": 20}
+    first = {
+        "sync_nodes": 5,
+        "cleanup": 60,
+        "recompute_state": 30,
+        "finish_jobs": 5,
+        "export": 120,
+        "egress_watchdog": 15,
+        "tunnel_watchdog": 20,
+    }
     for name, trig in _triggers().items():
         sched.add_job(_wrap(name, TASKS[name][1]), trig, id=name, next_run_time=now + timedelta(seconds=first[name]))
     sched.start()

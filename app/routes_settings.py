@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import auth, egress, scheduler, settings, tunnel, views
+from . import alerts, auth, egress, scheduler, settings, tunnel, views
 
 router = APIRouter()
 
@@ -37,6 +37,7 @@ def settings_page(request: Request):
         egress_error=egress.last_error,
         last_sync=scheduler.last_sync,
         history=settings.history(15),
+        alert_log=[e for e in alerts.log if e["kind"] == "alert"],
     )
 
 
@@ -71,7 +72,7 @@ async def settings_save(request: Request):
         return _back(section, "Тип: none, ssh, socks5 или http")
 
     changed = settings.set_many(upd)
-    if section == "scheduler":
+    if section in ("scheduler", "checks"):
         scheduler.apply_intervals()
     elif section == "egress":
         egress.ensure()

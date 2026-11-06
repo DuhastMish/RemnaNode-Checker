@@ -164,6 +164,9 @@ def node_page(request: Request, node_id: str):
         mismatch=nodes.address_mismatch(node_id),
         same=nodes.same_address_targets(node_id),
         candidates=nodes.link_candidates(node_id),
+        incidents=[
+            dict(r) for r in db.q("SELECT * FROM incidents WHERE node_id=? ORDER BY id DESC LIMIT 10", (node_id,))
+        ],
         title=node["address"] or node_id[:8],
     )
 
@@ -212,7 +215,7 @@ def job_json(request: Request, job_id: int):
     j = jobs.get(job_id)
     if not j:
         return JSONResponse({"error": "not found"}, status_code=404)
-    return JSONResponse({"status": j["status"], "targets": j["targets"], "results": jobs.results(job_id)})
+    return JSONResponse({"status": j["status"], **jobs.progress(job_id), "targets": jobs.summary(j)})
 
 
 @router.get("/terminal")

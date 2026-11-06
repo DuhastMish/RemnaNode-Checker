@@ -101,6 +101,21 @@
     <p class="muted">Вставь на VPS, затем <code>wg syncconf wg0 &lt;(wg-quick strip wg0)</code> или <code>systemctl restart wg-quick@wg0</code>. После этого — «Применить» здесь.</p>
   {% endif %}
 
+  {% if sid == 'alerts' %}
+    <p class="muted">Алерты уходят при открытии и закрытии инцидента по ноде (переход в оранжевый/красный и
+      обратно в зелёный), при смене оранжевый ↔ красный и когда чекер пропадает или возвращается.
+      Серый (нет данных) алертов не вызывает. Формат: <code>POST {"type":"node"|"checker","event",…,"text"}</code>.</p>
+    <h2 style="margin-top:20px">Последние отправки</h2>
+    <table>
+      <tr><th>Когда</th><th>Текст</th><th>Результат</th></tr>
+      {% for e in alert_log %}
+      <tr><td>{{ e.ts|dt }}</td><td>{{ e.label }}</td><td class="{{ 'ok' if e.ok else 'bad' }}">{{ e.status }}</td></tr>
+      {% else %}
+      <tr><td colspan="3" class="muted">Ещё не отправлялось</td></tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+
   {% if sid == 'scheduler' %}
     <h2 style="margin-top:20px">Задачи</h2>
     <table>

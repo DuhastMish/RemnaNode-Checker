@@ -91,30 +91,18 @@ def check_json(request: Request, job: int):
     j = jobs.get(job)
     if not j:
         return JSONResponse({"error": "not found"}, status_code=404)
-    res = [
-        {
-            "name": t["address"],
-            "ip": t["address"],
-            "state": "grey",
-            "verdict": "Ждём чекеры",
-            "ssh": "",
-            "proxy": "",
-            "ts": None,
-        }
-        for t in j["targets"]
-    ]
-    by_addr = {}
-    for r in jobs.results(job):
-        by_addr.setdefault(r["target_address"], []).append(r)
-    for item in res:
-        rows = by_addr.get(item["ip"])
-        if rows:
-            last = rows[-1]
-            item.update(
-                state=last["state"],
-                verdict=VERDICT.get(last["state"], "Неизвестно"),
-                ssh=last["ssh_status"],
-                proxy=last["proxy_status"] or "",
-                ts=last["ts"],
-            )
-    return JSONResponse({"status": j["status"], "results": res})
+    res = []
+    for t in jobs.summary(j):
+        waiting = t["color"] == "grey" and j["status"] != "done"
+        res.append(
+            {
+                "name": t["address"],
+                "ip": t["address"],
+                "state": t["color"],
+                "verdict": "Ждём чекеры" if waiting else VERDICT.get(t["color"], "Неизвестно"),
+                "seen": f"{t['seen_by']} из {t['answered']}" if t["answered"] else "",
+                "ssh": t["ssh_status"],
+                "proxy": t["proxy_status"],
+            }
+        )
+    return JSONResponse({"status": j["status"], **jobs.progress(job), "results": res})

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import auth, db, sources, views
+from . import auth, db, export, sources, views
 
 router = APIRouter()
 
@@ -18,6 +18,7 @@ def sources_page(request: Request):
     rows = sources.all_sources()
     for s in rows:
         s["count"] = db.q1("SELECT COUNT(*) AS c FROM source_nodes WHERE source_id=?", (s["id"],))["c"]
+        s["last_export"] = export.last.get(s["id"])
     return views.render(request, "sources.html", sources=rows, types=sources.TYPES, title="Источники")
 
 

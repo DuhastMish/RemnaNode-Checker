@@ -8,15 +8,24 @@
   часть считает упавшей            → orange
   все считают упавшей              → red
 Результат по устаревшей ревизии / не тому адресу сохраняется (stale=1), но в состоянии не учитывается.
+
+Инциденты и алерты (по агрегату):
+  orange/red и нет открытого инцидента → открыть, алерт down;
+  orange ↔ red при открытом инциденте   → алерт changed;
+  green при открытом инциденте          → закрыть, алерт up (с адресом на момент открытия);
+  grey (нет данных)                      → инциденты не трогаем и не шлём ничего — пропажу чекеров
+                                           покрывает отдельный алерт checker offline/online.
 """
 
 import threading
 import time
 
-from . import checkers, db, settings
+from . import alerts, checkers, db, settings
 
 FAIL_THRESHOLD = 2
-_lock = threading.Lock()
+DOWN_COLORS = ("orange", "red")
+COLOR_TEXT = {"green": "работает", "orange": "недоступна у части чекеров", "red": "недоступна у всех чекеров"}
+_lock = threading.RLock()
 
 
 def _int(v):
@@ -137,12 +146,117 @@ def recompute(node_id, online=None, now=None):
             "down_count=excluded.down_count, updated_at=excluded.updated_at",
             (node_id, color, up, down, last_ts),
         )
+        _incident_step(node_id, old, color, up, down)
     return old, color
+
+
+def _node_label(node_id):
+    rows = db.q(
+        "SELECT s.name AS source, sn.name, sn.external_id FROM source_nodes sn JOIN sources s ON s.id = sn.source_id "
+        "WHERE sn.node_id=? ORDER BY sn.is_primary DESC, sn.id",
+        (node_id,),
+    )
+    return [dict(r) for r in rows]
+
+
+def _incident_step(node_id, old, color, up, down):
+    if color == "grey":
+        return
+    now = int(time.time())
+    inc = db.q1("SELECT * FROM incidents WHERE node_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1", (node_id,))
+    node = db.q1("SELECT address FROM nodes WHERE id=?", (node_id,))
+    address = node["address"] if node else ""
+    if color in DOWN_COLORS:
+        if not inc:
+            inc_id = db.x(
+                "INSERT INTO incidents(node_id, opened_at, address_at_open, color) VALUES(?,?,?,?)",
+                (node_id, now, address, color),
+            )
+            db.x("UPDATE node_state SET incident_id=? WHERE node_id=?", (inc_id, node_id))
+            _alert_node("down", node_id, inc_id, color, old, address, address, up, down)
+        elif inc["color"] != color:
+            db.x("UPDATE incidents SET color=? WHERE id=?", (color, inc["id"]))
+            _alert_node("changed", node_id, inc["id"], color, inc["color"], address, inc["address_at_open"], up, down)
+    elif color == "green" and inc:
+        db.x("UPDATE incidents SET closed_at=? WHERE id=?", (now, inc["id"]))
+        db.x("UPDATE node_state SET incident_id=NULL WHERE node_id=?", (node_id,))
+        _alert_node(
+            "up",
+            node_id,
+            inc["id"],
+            color,
+            inc["color"],
+            address,
+            inc["address_at_open"],
+            up,
+            down,
+            duration=now - inc["opened_at"],
+        )
+
+
+def _alert_node(event, node_id, incident_id, color, prev, address, address_at_open, up, down, duration=None):
+    names = _node_label(node_id)
+    title = ", ".join(f"{n['name'] or n['external_id']} ({n['source']})" for n in names) or node_id
+    if event == "down":
+        text = f"[DOWN] {title} {address}: {COLOR_TEXT[color]} (видят {up} из {up + down})"
+    elif event == "changed":
+        text = f"[CHANGED] {title} {address}: {COLOR_TEXT.get(prev, prev)} → {COLOR_TEXT[color]} (видят {up} из {up + down})"
+    else:
+        text = f"[UP] {title} {address}: снова работает, инцидент #{incident_id} длился {max(1, (duration or 0) // 60)} мин"
+        if address_at_open and address_at_open != address:
+            text += f"; адрес изменён {address_at_open} → {address}"
+    alerts.send_alert(
+        {
+            "type": "node",
+            "event": event,
+            "text": text,
+            "node_id": node_id,
+            "incident_id": incident_id,
+            "color": color,
+            "prev_color": prev,
+            "address": address,
+            "address_at_open": address_at_open,
+            "checkers_up": up,
+            "checkers_down": down,
+            "sources": names,
+            "ts": int(time.time()),
+        }
+    )
+
+
+def checker_transitions(now=None):
+    """online/offline чекеров: запомнить и прислать алерт (только для включённых)."""
+    now = now or time.time()
+    for r in db.q("SELECT * FROM checkers"):
+        on = checkers.is_online(r, now)
+        if bool(r["online"]) == on:
+            continue
+        db.x("UPDATE checkers SET online=? WHERE id=?", (1 if on else 0, r["id"]))
+        if not r["enabled"]:
+            continue
+        event = "online" if on else "offline"
+        alerts.send_alert(
+            {
+                "type": "checker",
+                "event": event,
+                "text": f"[CHECKER {event.upper()}] {r['name']}"
+                + (
+                    " на связи"
+                    if on
+                    else f" пропал: нет heartbeat с {time.strftime('%H:%M:%S', time.localtime(r['last_seen_at'] or now))}"
+                ),
+                "checker_id": r["id"],
+                "name": r["name"],
+                "last_seen_at": r["last_seen_at"],
+                "ts": int(now),
+            }
+        )
 
 
 def recompute_all():
     """Периодически: чекеры уходят в offline, результаты устаревают — цвет должен это отражать."""
-    online = checkers.online_ids()
     now = time.time()
+    checker_transitions(now)
+    online = checkers.online_ids()
     for r in db.q("SELECT id FROM nodes"):
         recompute(r["id"], online, now)

@@ -2,29 +2,38 @@
 {% block content %}
 <div class="card">
   <h2>Проверка #{{ job.id }} <span class="muted" id="st">{{ job.status }}</span></h2>
-  <div class="muted">создана {{ job.created_at|dt }} · запросил: {{ job.requested_by }} · целей: {{ job.targets|length }}</div>
+  <div class="muted">создана {{ job.created_at|dt }} · запросил: {{ job.requested_by }} · целей: {{ job.targets|length }}
+    · <span id="prog"></span></div>
   <div class="actions"><a class="btn secondary" href="/">← к списку</a></div>
 </div>
 <div class="card">
   <table id="tbl">
-    <tr><th></th><th>Адрес</th><th>Чекер</th><th>SSH</th><th>Прокси</th><th>Задержка</th></tr>
+    <tr><th></th><th>Адрес</th><th>Итог</th><th>Видят чекеров</th><th>SSH</th><th>Прокси</th><th>Задержка</th></tr>
   </table>
-  <p class="muted" id="empty">Результатов пока нет — задание ждёт чекеры.</p>
+  <p class="muted">Итог по всем чекерам: зелёный — видят все, оранжевый — часть, красный — никто.
+    Результаты учитываются в состоянии нод так же, как плановые.</p>
 </div>
 <script>
 const id = {{ job.id }};
+const L = {{ COLOR_LABEL|tojson }};
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 async function tick(){
   const r = await fetch('/jobs/'+id+'/json'); if(!r.ok) return;
   const j = await r.json();
-  document.getElementById('st').textContent = j.status;
+  document.getElementById('st').textContent = j.status === 'done' ? 'готово' : 'ждём чекеры…';
+  document.getElementById('prog').textContent = j.checkers_total
+    ? 'ответили чекеров: '+j.checkers_done+' из '+j.checkers_total : 'нет online-чекеров';
   const t = document.getElementById('tbl');
   while(t.rows.length>1) t.deleteRow(1);
-  document.getElementById('empty').style.display = j.results.length ? 'none' : '';
-  for(const x of j.results){
+  for(const x of j.targets){
     const tr = t.insertRow();
-    const addr = x.node_id ? '<a href="/node/'+esc(x.node_id)+'"><code>'+esc(x.target_address)+'</code></a>' : '<code>'+esc(x.target_address)+'</code>';
-    tr.innerHTML = '<td><span class="dot '+esc(x.state)+'"></span></td><td>'+addr+'</td><td>'+esc(x.checker_name)+'</td><td>'+esc(x.ssh_status)+'</td><td>'+esc(x.proxy_status||'—')+'</td><td>'+(x.latency_ms==null?'—':x.latency_ms+' мс')+'</td>';
+    const addr = '<code>'+esc(x.address)+(x.port ? ':'+esc(x.port) : '')+'</code>';
+    tr.innerHTML = '<td><span class="dot '+esc(x.color)+'"></span></td>'
+      + '<td>'+(x.node_id ? '<a href="/node/'+esc(x.node_id)+'">'+addr+'</a>' : addr)+'</td>'
+      + '<td>'+esc(L[x.color]||x.color)+'</td>'
+      + '<td>'+(x.answered ? x.seen_by+' из '+x.answered : '—')+'</td>'
+      + '<td>'+esc(x.ssh_status||'—')+'</td><td>'+esc(x.proxy_status||'—')+'</td>'
+      + '<td>'+(x.latency_ms==null?'—':x.latency_ms+' мс')+'</td>';
   }
   if(j.status!=='done') setTimeout(tick, 2000);
 }

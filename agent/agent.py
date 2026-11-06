@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import probes
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 BATCH = 200
 
 log = logging.getLogger("agent")
@@ -124,6 +124,9 @@ class Agent:
         self.nodes_rev = None
         self.heartbeat_sec = 30
         self.check_running = threading.Event()
+        # ручные задания — отдельным пулом, не ждут окончания плановой проверки
+        self.job_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="job")
+        self.seen_jobs = set()
 
     # --- синхронизация с панелью ---
 
@@ -195,6 +198,32 @@ class Agent:
             sent,
         )
 
+    def run_job(self, job):
+        job_id = job["job_id"]
+        try:
+            self.run_check(job.get("targets") or [], job_id=job_id)
+        except Exception:
+            log.exception("задание #%s упало", job_id)
+        try:
+            self.panel.call("POST", f"/jobs/{job_id}/ack", {"status": "done"})
+        except (ApiError, OSError) as e:
+            log.warning("задание #%s: не удалось подтвердить завершение: %s", job_id, e)
+
+    def take_jobs(self, jobs):
+        for job in jobs:
+            job_id = job.get("job_id")
+            if job_id is None or job_id in self.seen_jobs:
+                continue
+            self.seen_jobs.add(job_id)
+            try:
+                self.panel.call("POST", f"/jobs/{job_id}/ack", {"status": "taken"})
+            except (ApiError, OSError) as e:
+                log.warning("задание #%s: ack taken не прошёл: %s", job_id, e)
+            log.info("задание #%s: %d целей", job_id, len(job.get("targets") or []))
+            self.job_pool.submit(self.run_job, job)
+        if len(self.seen_jobs) > 10000:
+            self.seen_jobs = set(sorted(self.seen_jobs)[-1000:])
+
     def scheduled_check(self):
         try:
             self.run_check([n for n in self.nodes if n.get("is_active")])
@@ -215,7 +244,7 @@ class Agent:
             if now >= next_hb:
                 next_hb = now + self.heartbeat_sec
                 try:
-                    self.heartbeat()
+                    self.take_jobs(self.heartbeat())
                 except ApiError as e:
                     if e.status in (401, 403):
                         log.error("токен отклонён (%s) — переподключение", e.status)

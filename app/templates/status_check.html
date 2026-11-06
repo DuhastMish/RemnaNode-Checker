@@ -4,7 +4,7 @@
 .verdict{padding:14px 16px;border-radius:10px;margin-bottom:14px;background:#0f1115;border:1px solid var(--border)}
 .verdict .big{font-size:24px;font-weight:600}
 .verdict .big .dot{width:16px;height:16px;margin-right:10px}
-.verdict.green .big{color:var(--green)}.verdict.red .big{color:var(--red)}.verdict.yellow .big{color:var(--yellow)}
+.verdict.green .big{color:var(--green)}.verdict.red .big{color:var(--red)}.verdict.yellow .big{color:var(--yellow)}.verdict.orange .big{color:var(--orange)}
 </style>
 <div class="card">
   <h2>Проверить доступность сервера</h2>
@@ -19,7 +19,7 @@
 <div class="card">
   <h2>Результат <span class="muted" id="st">…</span></h2>
   <div id="verdicts"></div>
-  <table id="tbl"><tr><th></th><th>Сервер</th><th>IP</th><th>Статус</th><th>SSH</th><th>Прокси</th></tr></table>
+  <table id="tbl"><tr><th></th><th>Адрес</th><th>Статус</th><th>Видят чекеров</th><th>SSH</th><th>Прокси</th></tr></table>
 </div>
 <script>
 const job = {{ job_id|int }};
@@ -28,11 +28,11 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','
 async function tick(){
   const r = await fetch('/check/json?job='+job); if(!r.ok) return;
   const j = await r.json();
-  document.getElementById('st').textContent = j.status==='done' ? 'готово' : 'проверяю…';
+  document.getElementById('st').textContent = (j.status==='done' ? 'готово' : 'проверяю…') + (j.checkers_total ? ' · ответили чекеров '+j.checkers_done+' из '+j.checkers_total : ' · нет online-чекеров');
   const t = document.getElementById('tbl'); while(t.rows.length>1) t.deleteRow(1);
   const v = document.getElementById('verdicts'); v.innerHTML='';
   for(const x of j.results){
-    v.innerHTML += '<div class="verdict '+esc(x.state)+'"><div class="big"><span class="dot '+esc(x.state)+'"></span>'+esc(x.verdict)+'</div></div>'; const tr=t.insertRow(); tr.innerHTML='<td><span class="dot '+esc(x.state)+'"></span></td><td>'+esc(x.name)+'</td><td><code>'+esc(x.ip)+'</code></td><td>'+esc(L[x.state]||x.state)+'</td><td>'+esc(x.ssh)+'</td><td>'+esc(x.proxy||'—')+'</td>'; }
+    v.innerHTML += '<div class="verdict '+esc(x.state)+'"><div class="big"><span class="dot '+esc(x.state)+'"></span>'+esc(x.verdict)+'</div></div>'; const tr=t.insertRow(); tr.innerHTML='<td><span class="dot '+esc(x.state)+'"></span></td><td><code>'+esc(x.ip)+'</code></td><td>'+esc(L[x.state]||x.state)+'</td><td>'+esc(x.seen||'—')+'</td><td>'+esc(x.ssh)+'</td><td>'+esc(x.proxy||'—')+'</td>'; }
   if(j.status!=='done') setTimeout(tick, 2000);
 }
 tick();

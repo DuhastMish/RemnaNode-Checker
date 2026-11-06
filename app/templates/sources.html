@@ -4,6 +4,9 @@
 <div class="card" id="s{{ s.id }}">
   <h2>{{ s.name }} <span class="badge">{{ types[s.type] }}</span> <span class="muted" style="font-size:14px">{{ s.count }} нод</span></h2>
   <p class="muted">Синхронизация {{ s.last_sync_at|ago }}{% if s.last_sync_msg %}: <span class="{{ 'ok' if s.last_sync_ok else 'bad' }}">{{ s.last_sync_msg }}</span>{% endif %}</p>
+  {% if s.export_url %}<p class="muted">Экспорт: {% if s.last_export %}{{ s.last_export.ts|ago }} —
+    <span class="{{ 'ok' if s.last_export.ok else 'bad' }}">{{ s.last_export.status }}</span>{% else %}ещё не отправлялся
+    (раз в интервал плановой проверки){% endif %}</p>{% endif %}
   <form method="post" action="/sources/{{ s.id }}">
     <div class="row"><label>Имя вкладки</label><input name="name" value="{{ s.name }}" required></div>
     <div class="row"><label>URL панели</label><input name="url" value="{{ s.url }}" required></div>

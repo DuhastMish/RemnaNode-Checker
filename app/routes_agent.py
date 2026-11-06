@@ -9,11 +9,11 @@ import json
 
 from fastapi import APIRouter, HTTPException, Request
 
-from . import auth, checkers, db, nodes, settings, state
+from . import auth, checkers, db, jobs, nodes, settings, state
 
 router = APIRouter(prefix="/api/v1/agent")
 
-HEARTBEAT_SEC = 30
+HEARTBEAT_SEC = 15  # ручные задания доходят до чекера не дольше чем за этот интервал
 CONFIG_KEYS = ("check_interval_min", "max_workers", "probes", "proxy_timeout_sec", "proxy_probe_url")
 
 api_limit = auth.RateLimit(240, 60)  # на чекер
@@ -67,7 +67,7 @@ async def hello(request: Request):
 def heartbeat(request: Request):
     ch = _checker(request)
     checkers.touch(ch["id"])
-    return {**_revisions(), "jobs": []}
+    return {**_revisions(), "jobs": jobs.pending_for(ch["id"])}
 
 
 @router.get("/config")
@@ -104,6 +104,20 @@ async def results(request: Request):
     if not isinstance(items, list) or len(items) > 5000:
         raise HTTPException(400, "results: list expected (<= 5000)")
     items = [i for i in items if isinstance(i, dict)]
+    # job_id принимаем только для заданий, назначенных этому чекеру
+    mine = {r["job_id"] for r in db.q("SELECT job_id FROM job_checkers WHERE checker_id=?", (ch["id"],))}
+    for i in items:
+        if i.get("job_id") not in mine:
+            i["job_id"] = None
     checkers.touch(ch["id"])
     accepted, dupes, stale = state.ingest(ch["id"], items)
     return {"accepted": accepted, "duplicates": dupes, "stale": stale}
+
+
+@router.post("/jobs/{job_id}/ack")
+async def job_ack(request: Request, job_id: int):
+    ch = _checker(request)
+    data = await _body(request)
+    if not jobs.ack(job_id, ch["id"], data.get("status")):
+        raise HTTPException(404, "job not assigned to this checker")
+    return {"ok": True}

@@ -11,7 +11,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from . import db, nodes
+from . import db, jobs, nodes
 
 TYPES = {"remnawave": "Remnawave", "open60": "Open60"}
 
@@ -170,6 +170,7 @@ def sync_source(source_id):
                 changed.append(node_id)
     msg = f"{len(items)} нод, изменилось целей: {len(changed)}"
     _set_status(source_id, True, msg)
+    urgent_check(changed)
     return True, msg, changed
 
 
@@ -197,8 +198,19 @@ def sync_node(source_node_id):
         msg = "обновлена"
         if res["old_address"] != res["new_address"]:
             msg += f", адрес изменён {res['old_address']} → {res['new_address']}"
+        urgent_check([node_id])
         return True, msg, [node_id]
     return True, "без изменений", []
+
+
+def urgent_check(node_ids):
+    """Внеочередная проверка изменившихся (в т.ч. новых) активных целей — не ждать планового интервала."""
+    targets = []
+    for node_id in node_ids:
+        n = db.q1("SELECT is_active FROM nodes WHERE id=?", (node_id,))
+        if n and n["is_active"]:
+            targets.append(jobs.target_for_node(node_id))
+    return jobs.create(targets, "sync")
 
 
 def sync_all():
