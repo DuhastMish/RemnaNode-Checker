@@ -10,4 +10,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 ENV PYTHONUNBUFFERED=1 DATA_DIR=/data WG_DIR=/etc/wireguard
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# BIND_HOST=127.0.0.1 — панель доступна только через веб-сервер на этой же машине (панель на VPS)
+CMD ["sh", "-c", "exec uvicorn app.main:app --host \"${BIND_HOST:-0.0.0.0}\" --port 8000 --proxy-headers --forwarded-allow-ips '*'"]
