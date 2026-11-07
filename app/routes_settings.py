@@ -136,6 +136,19 @@ def tunnel_genkey(request: Request):
     return _back("tunnel", "Ключи перегенерированы. Обнови [Peer] на VPS и нажми «Применить»")
 
 
+@router.post("/settings/alerts/test")
+async def alerts_test(request: Request):
+    """Тестовая отправка: URL и токен из формы (можно до сохранения), пустые — из сохранённых настроек."""
+    auth.require_admin(request)
+    form = await request.form()
+    url = (form.get("alert_webhook_url") or "").strip() or settings.get("alert_webhook_url")
+    token = (form.get("alert_webhook_token") or "").strip() or settings.get("alert_webhook_token")
+    if not url:
+        return _back("alerts", "Вебхук: укажи URL")
+    e = alerts.send_test(url, token)
+    return _back("alerts", f"Тестовый вебхук: {'доставлен' if e['ok'] else 'не доставлен'} — {e['status']}")
+
+
 @router.post("/settings/egress/test")
 def egress_test(request: Request):
     auth.require_admin(request)

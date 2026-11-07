@@ -25,7 +25,11 @@ def post_json(url, token, payload, kind, label):
     entry = {"ts": int(time.time()), "kind": kind, "label": label}
     try:
         r = httpx.post(url, json=payload, headers=headers, proxy=egress.proxy_url(), timeout=20)
-        entry.update(ok=r.is_success, status=f"HTTP {r.status_code}")
+        status = f"HTTP {r.status_code}"
+        if not r.is_success:
+            body = " ".join(r.text.split())[:100]
+            status += f": {body}" if body else ""
+        entry.update(ok=r.is_success, status=status)
     except Exception as e:
         entry.update(ok=False, status=str(e)[:120])
     log.appendleft(entry)
@@ -57,6 +61,18 @@ def enqueue(url, token, payload, kind, label):
         _q.put_nowait((url, token, payload, kind, label))
     except queue.Full:
         log.appendleft({"ts": int(time.time()), "kind": kind, "label": label, "ok": False, "status": "очередь полна"})
+
+
+def send_test(url, token):
+    """Тестовый вебхук синхронно (кнопка в настройках). Возвращает запись журнала."""
+    payload = {
+        "type": "test",
+        "event": "test",
+        "text": "[TEST] nodecheck: проверка вебхука",
+        "ts": int(time.time()),
+    }
+    post_json(url, token, payload, "alert", payload["text"])
+    return log[0]
 
 
 def send_alert(payload):

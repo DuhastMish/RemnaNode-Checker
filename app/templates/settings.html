@@ -81,6 +81,7 @@
     {% endfor %}
     <div class="actions">
       <button type="submit">Сохранить</button>
+      {% if sid == 'alerts' %}<button type="submit" class="secondary" formaction="/settings/alerts/test">Отправить тестовый</button>{% endif %}
       {% if sid == 'egress' %}<button type="submit" class="secondary" formaction="/settings/egress/test">Проверить (показать внешний IP)</button>{% endif %}
       {% if sid == 'tunnel' %}
         <button type="submit" formaction="/settings/tunnel/provision" onclick="return confirm('Зайти на VPS по SSH, поставить WireGuard и поднять туннель?')">Настроить VPS автоматически</button>
@@ -102,9 +103,11 @@
   {% endif %}
 
   {% if sid == 'alerts' %}
-    <p class="muted">Алерты уходят при открытии и закрытии инцидента по ноде (переход в оранжевый/красный и
-      обратно в зелёный), при смене оранжевый ↔ красный и когда чекер пропадает или возвращается.
-      Серый (нет данных) алертов не вызывает. Формат: <code>POST {"type":"node"|"checker","event",…,"text"}</code>.</p>
+    <p class="muted">Алерты уходят только в момент перехода: открытие и закрытие инцидента по ноде (оранжевый/красный
+      и обратно в зелёный), смена оранжевый ↔ красный, чекер пропал или вернулся, обрыв трафика ноды Remnawave и
+      его восстановление. Уже открытые инциденты повторно не отправляются; серый (нет данных) алертов не вызывает.
+      Журнал ниже хранится в памяти и очищается при перезапуске панели.
+      Формат: <code>POST {"type":"node"|"checker"|"traffic"|"test","event",…,"text"}</code>.</p>
     <h2 style="margin-top:20px">Последние отправки</h2>
     <table>
       <tr><th>Когда</th><th>Текст</th><th>Результат</th></tr>
