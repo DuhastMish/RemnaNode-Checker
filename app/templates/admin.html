@@ -3,8 +3,15 @@
 {% block content %}
 
 <section class="card alerts">
-  <h2>Активные оповещения{% if alerts %} <span class="count">{{ alerts|length }}</span>{% endif %}</h2>
-  {% for a in alerts %}
+  {% set problems = alerts|rejectattr('positive')|list %}
+  {% set good = alerts|selectattr('positive')|list %}
+  <h2>Активные оповещения
+    {%- if problems %} <span class="count">{{ problems|length }}</span>{% endif %}
+    {%- if good %} <span class="count good" title="можно вернуть в работу">{{ good|length }}</span>{% endif %}</h2>
+  {% if not problems %}
+  <div class="allok">{{ pulse('green') }} Всё работает — открытых инцидентов нет, все чекеры на связи</div>
+  {% endif %}
+  {% for a in problems + good %}
   <a class="alert {{ a.color }}" href="{{ a.href }}">
     {{ pulse(a.color) }}
     <span class="what">
@@ -13,8 +20,6 @@
     </span>
     <span class="since" title="{{ a.since|dt }}">{% if a.since %}{{ a.since|duration }}{% endif %}</span>
   </a>
-  {% else %}
-  <div class="allok">{{ pulse('green') }} Всё работает — открытых инцидентов нет, все чекеры на связи</div>
   {% endfor %}
 </section>
 

@@ -60,7 +60,7 @@
   <div class="foot">
     <span>
     {%- if not r.target_active -%}
-      неактивна{% if r.probe_color and r.probe_color != 'grey' %} · проверки: {{ COLOR_LABEL[r.probe_color] }}{% endif %}
+      неактивна{% if r.revivable %} · <span class="ok">можно вернуть</span>{% elif r.probe_color and r.probe_color != 'grey' %} · проверки: {{ COLOR_LABEL[r.probe_color] }}{% endif %}
     {%- else -%}
       {{ COLOR_LABEL[r.color] }}{% if r.incident_since %} · {{ r.incident_since|duration }}{% endif %}
       {%- if admin and not r.is_active %} · неактивна в источнике{% endif %}

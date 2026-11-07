@@ -93,6 +93,8 @@ CREATE TABLE IF NOT EXISTS node_checker_state (
     last_state   TEXT,
     fail_streak  INTEGER NOT NULL DEFAULT 0,
     seen_alive   INTEGER NOT NULL DEFAULT 0,  -- чекер хоть раз видел адрес живым (SSH прошёл: green/yellow)
+    ok_streak    INTEGER NOT NULL DEFAULT 0,  -- green подряд
+    ok_since     INTEGER,                     -- ts первого green в текущей серии
     last_ts      INTEGER,
     PRIMARY KEY (node_id, checker_id)
 );
@@ -102,6 +104,8 @@ CREATE TABLE IF NOT EXISTS node_state (
     node_id      TEXT PRIMARY KEY,
     color        TEXT NOT NULL DEFAULT 'grey',  -- цвет плитки: у неактивной ноды всегда grey
     probe_color  TEXT,                          -- что видят чекеры (агрегат), в т.ч. у неактивной ноды
+    ok_streak    INTEGER NOT NULL DEFAULT 0,    -- min green подряд по online-чекерам (0, если кто-то не green)
+    ok_since     INTEGER,                       -- с какого момента все эти чекеры видят ноду рабочей
     up_count     INTEGER DEFAULT 0,
     down_count   INTEGER DEFAULT 0,
     incident_id  INTEGER,
@@ -196,9 +200,15 @@ def init():
     c = conn()
     c.executescript(SCHEMA)
     # миграции существующих баз
-    cols = {r[1] for r in c.execute("PRAGMA table_info(node_state)")}
-    if "probe_color" not in cols:
-        c.execute("ALTER TABLE node_state ADD COLUMN probe_color TEXT")
+    for table, col, ddl in (
+        ("node_state", "probe_color", "TEXT"),
+        ("node_state", "ok_streak", "INTEGER NOT NULL DEFAULT 0"),
+        ("node_state", "ok_since", "INTEGER"),
+        ("node_checker_state", "ok_streak", "INTEGER NOT NULL DEFAULT 0"),
+        ("node_checker_state", "ok_since", "INTEGER"),
+    ):
+        if col not in {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:
+            c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
     cols = {r[1] for r in c.execute("PRAGMA table_info(source_nodes)")}
     if "country" not in cols:
         c.execute("ALTER TABLE source_nodes ADD COLUMN country TEXT DEFAULT ''")

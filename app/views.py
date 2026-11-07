@@ -101,6 +101,7 @@ def nodes_with_state(source_id=None):
         "SELECT sn.id AS sn_id, sn.source_id, sn.external_id, sn.name, sn.address, sn.flags, sn.country, sn.is_active, "
         "sn.is_primary, n.id AS node_id, n.address AS target_address, n.fresh_port, n.rev, "
         "COALESCE(ns.color, 'grey') AS color, COALESCE(ns.probe_color, 'grey') AS probe_color, "
+        "COALESCE(ns.ok_streak, 0) AS ok_streak, ns.ok_since, "
         "n.is_active AS target_active, ns.updated_at AS checked_at, ns.up_count, ns.down_count, "
         "(SELECT opened_at FROM incidents i WHERE i.id = ns.incident_id AND i.closed_at IS NULL) AS incident_since, "
         "(SELECT COUNT(*) FROM source_nodes x WHERE x.node_id = n.id) AS linked_count "
@@ -120,6 +121,7 @@ def nodes_with_state(source_id=None):
         r["mismatch"] = r["linked_count"] > 1 and r["address"] != r["target_address"]
         r.update(hist.get(r["node_id"]) or EMPTY_HISTORY)
         r["view"] = view_state(r)
+        r["revivable"] = revivable(r)
     return rows
 
 
@@ -127,6 +129,13 @@ def nodes_with_state(source_id=None):
 
 BARS = 30  # палочек в полосе; одна палочка — один интервал плановой проверки
 EMPTY_HISTORY = {"bars": [], "uptime": None, "latency": None}
+
+
+def revivable(r):
+    """Неактивная нода, которую все online-чекеры видят рабочей revive_ok_streak проверок подряд."""
+    need = settings.get("revive_ok_streak")
+    return bool(need > 0 and not r.get("target_active", 1) and r.get("probe_color") == "green"
+                and (r.get("ok_streak") or 0) >= need)
 
 
 def view_state(r):
@@ -212,7 +221,8 @@ def checker_stats():
 
 
 def active_alerts():
-    """Открытые инциденты активных нод (по всем источникам) и пропавшие чекеры — для блока на главной."""
+    """Блок на главной (по всем источникам): проблемы — открытые инциденты активных нод и пропавшие чекеры;
+    хорошие новости (positive) — неактивные ноды, которые все чекеры видят рабочими N проверок подряд."""
     out = []
     for r in db.q(
         "SELECT i.id AS incident_id, i.opened_at, n.id AS node_id, n.address, ns.color, ns.up_count, ns.down_count "
@@ -247,6 +257,30 @@ def active_alerts():
                     "text": "нет heartbeat" if c["last_seen_at"] else "ещё не подключался",
                     "since": c["last_seen_at"],
                     "href": "/checkers",
+                }
+            )
+    need = settings.get("revive_ok_streak")
+    if need > 0:
+        for r in db.q(
+            "SELECT n.id AS node_id, n.address, ns.ok_streak, ns.ok_since, ns.up_count FROM nodes n "
+            "JOIN node_state ns ON ns.node_id = n.id "
+            "WHERE n.is_active = 0 AND ns.probe_color = 'green' AND ns.ok_streak >= ? ORDER BY ns.ok_since",
+            (need,),
+        ):
+            names = state._node_label(r["node_id"])
+            out.append(
+                {
+                    "kind": "revive",
+                    "positive": True,
+                    "color": "green",
+                    "title": ", ".join(f"{n['name'] or n['external_id']}" for n in names) or r["address"],
+                    "country": next((n["country"] for n in names if n.get("country")), ""),
+                    "sources": ", ".join(dict.fromkeys(n["source"] for n in names)),
+                    "address": r["address"],
+                    "text": f"выключена в источнике, но все чекеры ({r['up_count']}) видят её рабочей "
+                    f"{r['ok_streak']} проверок подряд — можно вернуть в работу",
+                    "since": r["ok_since"],
+                    "href": f"/node/{r['node_id']}",
                 }
             )
     return out

@@ -34,6 +34,7 @@ def _public(rows):
             "latency": r["latency"],
             "incident_since": r["incident_since"],
             "probe_color": None,
+            "revivable": False,
         }
         for r in rows
     ]

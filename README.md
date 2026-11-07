@@ -78,5 +78,8 @@ POST <url>   Authorization: Bearer <токен экспорта>
 | `deploy/` | примеры конфигураций Caddy / nginx / WireGuard |
 | `docs/` | установка, устройство, ТЗ |
 
+Флаги стран: шрифт [Twemoji Country Flags](https://github.com/talkjs/country-flag-emoji-polyfill)
+(графика [Twemoji](https://github.com/twitter/twemoji), CC-BY 4.0), `app/static/fonts/`.
+
 Чекер — отдельный репозиторий [RemnaNode-Checker-Agent](https://github.com/DuhastMish/RemnaNode-Checker-Agent),
 образ `ghcr.io/duhastmish/remnanode-checker-agent`.

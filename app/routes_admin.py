@@ -142,6 +142,7 @@ def node_page(request: Request, node_id: str):
     auth.require_admin(request)
     node = db.q1(
         "SELECT n.*, COALESCE(ns.color, 'grey') AS color, COALESCE(ns.probe_color, 'grey') AS probe_color, "
+        "COALESCE(ns.ok_streak, 0) AS ok_streak, ns.ok_since, "
         "ns.updated_at AS checked_at, "
         "ns.up_count, ns.down_count FROM nodes n LEFT JOIN node_state ns ON ns.node_id = n.id "
         "WHERE n.id=?",
@@ -149,6 +150,8 @@ def node_page(request: Request, node_id: str):
     )
     if not node:
         return RedirectResponse("/?msg=Нода не найдена", status_code=303)
+    node = dict(node, target_active=node["is_active"])
+    node["revivable"] = views.revivable(node)
     hist = [
         dict(r)
         for r in db.q(
@@ -160,7 +163,7 @@ def node_page(request: Request, node_id: str):
     return views.render(
         request,
         "node.html",
-        node=dict(node),
+        node=node,
         linked=nodes.linked(node_id),
         hist=hist,
         mismatch=nodes.address_mismatch(node_id),

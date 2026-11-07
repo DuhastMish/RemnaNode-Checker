@@ -10,6 +10,8 @@
     · ревизия {{ node.rev }} · изменена {{ node.updated_at|ago }}
     <br>node_id <code>{{ node.id }}</code>
   </div>
+  {% if node.revivable %}<p class="ok"><b>Можно вернуть в работу:</b> все чекеры видят ноду рабочей
+    {{ node.ok_streak }} проверок подряд (с {{ node.ok_since|dt }}, {{ node.ok_since|duration }}).</p>{% endif %}
   {% if not node.is_active %}<p class="muted">Нода отключена в источнике: проверяется как обычно, но плитка серая,
     инцидентов и алертов нет. Если проверки проходят — включите её в источнике.</p>{% endif %}
   {% if mismatch %}<p class="bad">Адреса связанных нод разошлись — проверяется адрес основной ноды.</p>{% endif %}
