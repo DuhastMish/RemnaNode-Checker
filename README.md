@@ -74,6 +74,8 @@ POST <url>   Authorization: Bearer <токен экспорта>
 | Путь | Что |
 |---|---|
 | `app/` | панель (FastAPI + Jinja, SQLite `data/panel.db`) |
-| `agent/` | чекер (Python, только стандартная библиотека) |
 | `deploy/` | примеры конфигураций Caddy / nginx / WireGuard |
 | `docs/` | установка, устройство, ТЗ |
+
+Чекер — отдельный репозиторий [RemnaNode-Checker-Agent](https://github.com/DuhastMish/RemnaNode-Checker-Agent),
+образ `ghcr.io/duhastmish/remnanode-checker-agent`.

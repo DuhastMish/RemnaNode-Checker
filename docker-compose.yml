@@ -23,14 +23,24 @@ services:
     depends_on: [app]
     restart: unless-stopped
 
-  # Чекер на этой же машине (штатная конфигурация). Токен: панель → «Чекеры» → «Добавить».
-  # Раскомментировать и задать CHECKER_TOKEN в .env:
-  # agent:
-  #   build: ./agent
-  #   container_name: nodecheck-agent
-  #   network_mode: host
-  #   environment:
-  #     PANEL_URL: http://127.0.0.1:8000
-  #     CHECKER_TOKEN: ${CHECKER_TOKEN:?set CHECKER_TOKEN in .env}
-  #   depends_on: [app]
-  #   restart: unless-stopped
+  # HTTPS для ADMIN_HOST и STATUS_HOST: сертификаты Let's Encrypt получает сам, хранит в томе caddy_data.
+  # Нужны A-записи обоих доменов на IP этой машины и свободные порты 80/443.
+  # Включается профилем: COMPOSE_PROFILES=caddy в .env (панель дома за туннелем — оставить пустым).
+  caddy:
+    image: caddy:2.10-alpine
+    container_name: nodecheck-caddy
+    profiles: [caddy]
+    network_mode: host          # проксирует на 127.0.0.1:8000 (панель) и 127.0.0.1:7681 (терминал)
+    environment:
+      ADMIN_HOST: ${ADMIN_HOST:-}
+      STATUS_HOST: ${STATUS_HOST:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [app]
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

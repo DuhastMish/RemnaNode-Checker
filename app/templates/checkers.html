@@ -2,27 +2,24 @@
 {% block content %}
 {% if new_token %}
 <div class="card" style="border-color:var(--accent)">
-  <h2>Токен чекера «{{ new_name }}»</h2>
-  <p class="bad">Показывается один раз — скопируй сейчас. В панели хранится только его хэш.</p>
-  <pre>{{ new_token }}</pre>
-  <h2>Запуск на машине чекера</h2>
-  <p class="muted">Образ собирается из папки <code>agent/</code> репозитория:
-    <code>docker build -t {{ image }} agent/</code></p>
-  <pre>docker run -d --name nodecheck-agent --restart unless-stopped \
-  -e PANEL_URL={{ panel_url }} \
-  -e CHECKER_TOKEN={{ new_token }} \
-  {{ image }}</pre>
-  <p class="muted">или фрагмент для <code>docker-compose.yml</code>:</p>
-  <pre>services:
-  agent:
-    build: ./agent
-    container_name: nodecheck-agent
-    restart: unless-stopped
-    environment:
-      PANEL_URL: {{ panel_url }}
-      CHECKER_TOKEN: {{ new_token }}</pre>
-  <p class="muted">Чекер на одной машине с панелью: <code>PANEL_URL=http://127.0.0.1:8000</code> и <code>--network host</code>.</p>
+  <h2>Подключить чекер «{{ new_name }}»</h2>
+  <p class="bad">Показывается один раз — скопируй сейчас. В панели хранится только хэш токена.</p>
+  <p>Выполни на машине чекера (нужен Docker: <code>curl -fsSL https://get.docker.com | sh</code>):</p>
+  <pre id="cmd-run">docker run -d --name nodecheck-agent --restart unless-stopped \
+  {{ image }} {{ panel_arg }} {{ new_token }}</pre>
+  <div class="actions"><button type="button" class="secondary" onclick="copyPre('cmd-run', this)">Скопировать команду</button></div>
+  <p class="muted">Аргументы: домен панели и токен чекера. Параметры проверок чекер получит от панели сам.</p>
+  {% if panel_warning %}<p class="bad">{{ panel_warning }}</p>{% endif %}
+
 </div>
+<script>
+function copyPre(id, btn){
+  const text = document.getElementById(id).innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const t = btn.textContent; btn.textContent = 'Скопировано'; setTimeout(() => btn.textContent = t, 1500);
+  });
+}
+</script>
 {% endif %}
 
 <div class="card">

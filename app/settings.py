@@ -49,6 +49,15 @@ FIELDS = [
         "",
         'ответ должен быть {"ok": true, "ip": "<ip ноды>"}, например https://api.example.com/probe',
     ),
+    # --- установка чекеров: только для команды запуска в разделе «Чекеры»; домен панели — ADMIN_HOST в .env ---
+    (
+        "agents",
+        "agent_image",
+        "Docker-образ чекера",
+        "str",
+        "ghcr.io/duhastmish/remnanode-checker-agent:latest",
+        "собирается из репозитория RemnaNode-Checker-Agent",
+    ),
     # --- алерты ---
     (
         "alerts",
@@ -121,6 +130,7 @@ FIELDS = [
 SECTIONS = [
     ("scheduler", "Панель"),
     ("checks", "Проверки (параметры для чекеров)"),
+    ("agents", "Установка чекеров"),
     ("alerts", "Алерты"),
     ("tunnel", "Туннель панель ↔ VPS"),
     ("egress", "Исходящий VPS"),

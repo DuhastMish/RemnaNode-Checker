@@ -3,27 +3,35 @@
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 
-from . import auth, checkers, views
+from . import auth, checkers, config, settings, views
 
 router = APIRouter()
 
-AGENT_IMAGE = "nodecheck-agent"
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 
 
-def _panel_url(request: Request) -> str:
-    return str(request.base_url).rstrip("/")
+def _panel_arg(request: Request):
+    """Первый аргумент команды чекера: домен из ADMIN_HOST, иначе адрес, по которому открыта панель.
+
+    Возвращает (аргумент, предупреждение | None). Домен без схемы чекер понимает как https://домен.
+    """
+    if config.ADMIN_HOST:
+        return config.ADMIN_HOST, None
+    url = request.base_url
+    if url.scheme == "https":
+        return url.netloc, "ADMIN_HOST в .env не задан — домен взят из адреса, по которому открыта панель."
+    base = str(url).rstrip("/")
+    if url.hostname in LOCAL_HOSTS:
+        return base, "Локальный адрес панели — с другой машины чекер до него не достучится. Задай ADMIN_HOST в .env."
+    return base, "Панель открыта по http — чекер откажется подключаться. Задай ADMIN_HOST в .env или, в доверенной локальной сети, добавь -e ALLOW_HTTP=1."
 
 
-def _page(request: Request, **extra):
-    return views.render(
-        request,
-        "checkers.html",
-        checkers=checkers.all_checkers(),
-        panel_url=_panel_url(request),
-        image=AGENT_IMAGE,
-        title="Чекеры",
-        **extra,
-    )
+def _page(request: Request, new_token=None, **extra):
+    ctx = dict(checkers=checkers.all_checkers(), image=settings.get("agent_image"), title="Чекеры")
+    if new_token:
+        panel, warning = _panel_arg(request)
+        ctx.update(new_token=new_token, panel_arg=panel, panel_warning=warning)
+    return views.render(request, "checkers.html", **ctx, **extra)
 
 
 @router.get("/checkers")

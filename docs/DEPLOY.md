@@ -3,6 +3,52 @@
 Пошаговая инструкция: от чистого VPS до работающих страниц `https://admin.example.com`,
 `https://status.example.com` и чекеров в нужных сетях. Время: около часа, если домен и VPS уже есть.
 
+## Быстрый запуск
+
+Нужны: VPS с публичным IP (Debian/Ubuntu), свободные порты 80 и 443, домен и API-токен панели-источника.
+
+**1. DNS.** У регистратора — две A-записи на IP VPS:
+
+```
+admin.example.com   A   <IP VPS>
+status.example.com  A   <IP VPS>
+```
+
+**2. Панель на VPS** (от root). Сначала подставьте свои значения в первые три строки:
+
+```bash
+ADMIN_HOST=admin.example.com     # домен панели
+STATUS_HOST=status.example.com   # домен status-страницы
+TTYD_USER=user                   # пользователь VPS для веб-терминала
+
+curl -fsSL https://get.docker.com | sh
+apt-get install -y git openssh-server
+git clone https://github.com/DuhastMish/RemnaNode-Checker.git /opt/nodecheck
+cd /opt/nodecheck && cp .env.example .env
+sed -i "s|^ADMIN_HOST=.*|ADMIN_HOST=$ADMIN_HOST|; s|^STATUS_HOST=.*|STATUS_HOST=$STATUS_HOST|; s|^TTYD_USER=.*|TTYD_USER=$TTYD_USER|" .env
+docker compose up -d --build
+docker compose logs app | grep -E 'ADMIN_TOKEN|PIN'
+```
+
+Поднимутся панель, веб-терминал и Caddy. Caddy сам получит HTTPS-сертификаты на оба домена (это займёт
+до минуты). Последняя команда покажет сгенерированные admin-токен и PIN — сохраните их.
+
+**3. Первая настройка.** Откройте `https://admin.example.com` и войдите admin-токеном.
+
+- **Источники → Добавить источник:** тип, URL панели, API-токен.
+- **Чекеры → Добавить:** панель покажет готовую команду.
+
+**4. Чекер** — на каждой машине в той сети, из которой нужно проверять ноды (не на VPS панели):
+
+```bash
+curl -fsSL https://get.docker.com | sh
+docker run -d --name nodecheck-agent --restart unless-stopped \
+  ghcr.io/duhastmish/remnanode-checker-agent:latest admin.example.com nck_…   # команда из панели
+```
+
+Через минуту чекер станет `online` на странице «Чекеры», и плитки нод окрасятся. Подробности по каждому
+шагу и другие варианты (свой nginx, панель дома за NAT) описаны ниже.
+
 ## Как это устроено
 
 ```
@@ -14,7 +60,7 @@
    │ UI, ноды, агрегация, │   heartbeat / nodes /     │ дом, ISP 1 │ │ моб. сеть  │
    │ алерты, экспорт      │   results (поллинг)       └────────────┘ └────────────┘
    └──────────────────────┘
-          ▲ HTTPS (Caddy / nginx)
+          ▲ HTTPS (Caddy в составе панели / nginx)
        браузер
 ```
 
@@ -34,7 +80,7 @@
 |---|---|
 | VPS для панели | Linux с Docker и публичным IP (проверено на Debian 12), 1 ГБ RAM |
 | Домен | две A-записи на IP VPS: `admin.example.com` и `status.example.com` |
-| Машины для чекеров | любые Linux-машины с Docker в нужных сетях; можно и сам VPS панели |
+| Машины для чекеров | любые Linux-машины с Docker в нужных сетях (не машина панели) |
 | Источник нод | API-токен панели Remnawave и/или ADMIN_TOKEN Open60 |
 
 Дальше в примерах используются `admin.example.com`, `status.example.com` и пользователь `user`.
@@ -75,7 +121,9 @@ nano .env
 |---|---|
 | `ADMIN_TOKEN` | длинная случайная строка (`openssl rand -base64 32`). Пусто — сгенерируется и выведется в лог |
 | `PIN` | PIN для status-страницы. Пусто — сгенерируется 6-значный и выведется в лог |
+| `ADMIN_HOST` | `admin.example.com` — домен панели: на него Caddy получает сертификат, его же панель подставляет в команду запуска чекера |
 | `STATUS_HOST` | `status.example.com` — **обязательно**, по нему включается режим status |
+| `COMPOSE_PROFILES` | `caddy` — вместе с панелью поднимается встроенный Caddy (HTTPS) |
 | `BIND_HOST` | `127.0.0.1`: панель доступна только через веб-сервер на этой машине |
 | `TTYD_USER` | пользователь VPS для веб-терминала. Без него контейнеры не запустятся |
 | `TTYD_IFACE` | `lo` |
@@ -90,21 +138,19 @@ docker compose up -d --build
 docker compose logs app | grep -E 'ADMIN_TOKEN|PIN'    # если не задавали их в .env
 ```
 
-`docker compose ps` должен показать `nodecheck` и `nodecheck-ttyd` в состоянии `running`.
+`docker compose ps` должен показать `nodecheck`, `nodecheck-ttyd` и `nodecheck-caddy` в состоянии `running`.
 
-### 2.3. HTTPS через Caddy
+### 2.3. HTTPS
 
-```bash
-apt-get install -y caddy
-cp /opt/nodecheck/deploy/Caddyfile /etc/caddy/Caddyfile
-nano /etc/caddy/Caddyfile          # заменить example.com на свои домены
-systemctl reload caddy
-```
+Отдельно ставить ничего не нужно: Caddy — сервис `caddy` в `docker-compose.yml`, поднимается вместе с
+панелью (`COMPOSE_PROFILES=caddy`). Он сам получит сертификаты для `ADMIN_HOST` и `STATUS_HOST` и будет
+проксировать оба домена на `127.0.0.1:8000`, а `/ttyd/` — на терминал (`127.0.0.1:7681`). Конфиг —
+[deploy/Caddyfile](../deploy/Caddyfile), домены подставляются из `.env`. Порты 80 и 443 должны быть свободны.
 
-Caddy сам получит сертификаты и будет проксировать оба домена на `127.0.0.1:8000`, а `/ttyd/` — на
-терминал (`127.0.0.1:7681`).
+Логи: `docker compose logs caddy`. Сертификаты хранятся в томе `caddy_data` и переживают пересоздание
+контейнера.
 
-Если на VPS уже работает nginx, возьмите за основу [deploy/nginx-nodecheck.conf.template](../deploy/nginx-nodecheck.conf.template):
+Если на VPS уже работает nginx, оставьте `COMPOSE_PROFILES` пустым и возьмите за основу [deploy/nginx-nodecheck.conf.template](../deploy/nginx-nodecheck.conf.template):
 
 - **nginx установлен на хосте:** `proxy_pass http://127.0.0.1:8000` и `http://127.0.0.1:7681`.
 - **nginx в Docker-контейнере:** `127.0.0.1` внутри контейнера — это сам контейнер. Укажите в `.env`
@@ -133,8 +179,9 @@ Caddy сам получит сертификаты и будет проксир�
 
 ### 4.1. Зарегистрировать чекер в панели
 
-**Чекеры → Добавить**, имя (например, «Дом · провайдер 1»). Панель один раз покажет токен `nck_…` и
-готовую команду запуска. Скопируйте токен сразу: в панели хранится только его хэш.
+**Чекеры → Добавить**, имя (например, «Дом · провайдер 1»). Панель один раз покажет готовую команду
+запуска: домен панели (из `ADMIN_HOST`) и токен `nck_…`. Скопируйте её сразу: в панели хранится
+только хэш токена.
 
 ### 4.2. Запустить на машине чекера
 
@@ -142,23 +189,18 @@ Caddy сам получит сертификаты и будет проксир�
 
 ```bash
 curl -fsSL https://get.docker.com | sh
-git clone https://github.com/DuhastMish/RemnaNode-Checker.git nodecheck
-cd nodecheck
-PANEL_URL=https://admin.example.com CHECKER_TOKEN=nck_xxxxxxxx \
-  docker compose -f agent/compose.yml up -d --build
+docker run -d --name nodecheck-agent --restart unless-stopped \
+  ghcr.io/duhastmish/remnanode-checker-agent:latest admin.example.com nck_xxxxxxxx
 ```
 
-Чекеру нужен только исходящий доступ к `PANEL_URL` по HTTPS и к проверяемым нодам. Входящие порты и
+Образ собирается из репозитория [RemnaNode-Checker-Agent](https://github.com/DuhastMish/RemnaNode-Checker-Agent)
+(там же `docker-compose.yml` и описание параметров).
+
+Чекеру нужен только исходящий доступ к панели по HTTPS и к проверяемым нодам. Входящие порты и
 белый IP не нужны.
 
 Логи: `docker logs -f nodecheck-agent`. В течение минуты появится `подключён к панели`, затем сводка
 `плановая проверка: N целей … отправлено N`. Адреса нод в лог не пишутся.
-
-### 4.3. Чекер на той же машине, что и панель
-
-Это штатный вариант: например, проверка «из дата-центра». В `docker-compose.yml` панели раскомментируйте
-сервис `agent`, добавьте в `.env` строку `CHECKER_TOKEN=nck_…` и выполните `docker compose up -d --build`.
-Чекер обращается к панели по `http://127.0.0.1:8000` в сети хоста.
 
 ## Шаг 5. Проверка
 
@@ -234,9 +276,13 @@ cd /opt/nodecheck && git pull && docker compose up -d --build
 Чекер (на каждой машине):
 
 ```bash
-cd nodecheck && git pull
-PANEL_URL=… CHECKER_TOKEN=… docker compose -f agent/compose.yml up -d --build
+docker pull ghcr.io/duhastmish/remnanode-checker-agent:latest
+docker rm -f nodecheck-agent
+docker run -d --name nodecheck-agent --restart unless-stopped \
+  ghcr.io/duhastmish/remnanode-checker-agent:latest admin.example.com nck_…
 ```
+
+Токен запущенного чекера: `docker inspect nodecheck-agent --format '{{.Args}}'`.
 
 Проверки совместимости версий нет: обновляйте панель и чекеры вместе.
 
@@ -249,8 +295,9 @@ PANEL_URL=… CHECKER_TOKEN=… docker compose -f agent/compose.yml up -d --buil
 
 Если панель должна стоять дома, а наружу её нужно открыть через VPS:
 
-1. На домашней машине в `.env` укажите `BIND_HOST=0.0.0.0` и запустите панель (шаг 2.1–2.2).
-2. На VPS поставьте Caddy с [deploy/Caddyfile](../deploy/Caddyfile), заменив порты `8000 → 18000` и
+1. На домашней машине в `.env` укажите `BIND_HOST=0.0.0.0`, оставьте `COMPOSE_PROFILES` пустым (Caddy нужен
+   на VPS, а не дома) и запустите панель (шаг 2.1–2.2).
+2. На VPS поднимите Caddy с [deploy/Caddyfile](../deploy/Caddyfile), заменив порты `8000 → 18000` и
    `7681 → 17681`. Для nginx в Docker используйте [deploy/nginx-nodecheck.conf.template](../deploy/nginx-nodecheck.conf.template):
    в нём `172.18.0.1` — gateway Docker-сети nginx, узнать его можно так:
    `docker network inspect <сеть> --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'`.
@@ -285,8 +332,8 @@ PANEL_URL=… CHECKER_TOKEN=… docker compose -f agent/compose.yml up -d --buil
 | Все плитки серые | нет online-чекеров (страница «Чекеры») или первая проверка ещё не прошла |
 | Чекер: `панель отклонила токен (401)` | токен скопирован не полностью или перевыпущен |
 | Чекер: `(403)` | чекер отключён в панели |
-| Чекер: `PANEL_URL должен быть https://` | укажите `https://…`; `http` разрешён только для localhost |
-| Чекер: `панель недоступна` | DNS/HTTPS до панели с машины чекера: `curl -I $PANEL_URL` |
+| Чекер: `адрес панели должен быть https://` | в `.env` панели не задан `ADMIN_HOST`: задайте, перезапустите панель и перевыпустите токен |
+| Чекер: `панель недоступна` | DNS/HTTPS до панели с машины чекера: `curl -I https://admin.example.com` |
 | Чекер online, но плитки серые | интервал проверки ещё не прошёл; на карточке ноды нажмите «Проверить сейчас» |
 | Домен открывает admin вместо status | `STATUS_HOST` в `.env` не совпадает с доменом; затем `docker compose up -d` |
 | 502 на домене | панель не запущена или веб-сервер проксирует не на тот адрес/порт |
