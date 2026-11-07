@@ -4,13 +4,19 @@
 # Caddy на VPS для панели дома за SSH-туннелем: тот же файл, порты 8000 → 18000 и 7681 → 17681
 # (за WireGuard: 127.0.0.1 → 10.8.0.2), запуск — как сервис caddy ниже, с этими же переменными.
 
+# HTTPS_PORT — если 443 на машине уже занят (например, 4443). Порт 80 должен быть свободен:
+# через него Let's Encrypt проверяет домен при выдаче сертификата.
+{
+	https_port {$HTTPS_PORT:443}
+}
+
 {$ADMIN_HOST} {
-    handle /ttyd/* {
-        reverse_proxy 127.0.0.1:7681
-    }
-    reverse_proxy 127.0.0.1:8000
+	handle /ttyd/* {
+		reverse_proxy 127.0.0.1:7681
+	}
+	reverse_proxy 127.0.0.1:8000
 }
 
 {$STATUS_HOST} {
-    reverse_proxy 127.0.0.1:8000
+	reverse_proxy 127.0.0.1:8000
 }

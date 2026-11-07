@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   # HTTPS для ADMIN_HOST и STATUS_HOST: сертификаты Let's Encrypt получает сам, хранит в томе caddy_data.
-  # Нужны A-записи обоих доменов на IP этой машины и свободные порты 80/443.
+  # Нужны A-записи обоих доменов на IP этой машины, свободный порт 80 и HTTPS_PORT (по умолчанию 443).
   # Включается профилем: COMPOSE_PROFILES=caddy в .env (панель дома за туннелем — оставить пустым).
   caddy:
     image: caddy:2.10-alpine
@@ -34,6 +34,7 @@ services:
     environment:
       ADMIN_HOST: ${ADMIN_HOST:-}
       STATUS_HOST: ${STATUS_HOST:-}
+      HTTPS_PORT: ${HTTPS_PORT:-443}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
