@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import db, egress, export, jobs, settings, sources, state, tunnel
+from . import db, egress, export, jobs, settings, sources, state, traffic, tunnel
 
 sched = BackgroundScheduler(
     timezone="UTC",
@@ -33,6 +33,7 @@ def cleanup():
         "DELETE FROM job_checkers WHERE job_id IN (SELECT id FROM jobs WHERE status='done' AND finished_at < ?)", (old,)
     )
     db.x("DELETE FROM jobs WHERE status='done' AND finished_at < ?", (old,))
+    traffic.cleanup()
 
 
 TASKS = {
@@ -40,6 +41,7 @@ TASKS = {
     "cleanup": ("Очистка истории", cleanup),
     "recompute_state": ("Пересчёт состояния нод (offline-чекеры, устаревание)", state.recompute_all),
     "finish_jobs": ("Завершение ручных заданий по таймауту", jobs.finish_due),
+    "traffic_poll": ("Трафик нод Remnawave (обрыв скорости)", traffic.poll),
     "export": ("Экспорт состояния в источники", export.export_all),
     "egress_watchdog": ("Исходящий VPS (watchdog)", egress.watchdog),
     "tunnel_watchdog": ("Туннель к VPS (watchdog)", tunnel.watchdog),
@@ -64,6 +66,7 @@ def _triggers():
         "cleanup": IntervalTrigger(days=1),
         "recompute_state": IntervalTrigger(seconds=30),
         "finish_jobs": IntervalTrigger(seconds=5),
+        "traffic_poll": IntervalTrigger(minutes=1),
         "export": IntervalTrigger(minutes=max(1, settings.get("check_interval_min"))),
         "egress_watchdog": IntervalTrigger(seconds=30),
         "tunnel_watchdog": IntervalTrigger(seconds=30),
@@ -77,6 +80,7 @@ def setup():
         "cleanup": 60,
         "recompute_state": 30,
         "finish_jobs": 5,
+        "traffic_poll": 20,
         "export": 120,
         "egress_watchdog": 15,
         "tunnel_watchdog": 20,

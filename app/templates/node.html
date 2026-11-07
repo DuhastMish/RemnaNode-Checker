@@ -21,6 +21,28 @@
   </div>
 </div>
 
+{% for c in charts %}
+{% set st = c.chart.state or {} %}
+<div class="card">
+  <h2>Трафик сервера{% if charts|length > 1 %} · {{ c.sn.source_name }}{% endif %} <span class="muted" style="font-size:13px;font-weight:400">исходящий, средняя за 5 мин, сутки</span></h2>
+  <div class="tstats">
+    <span>сейчас <b>{{ (st.rate_bps / 1e6)|round(1) if st.rate_bps is not none else '—' }}</b> Мбит/с</span>
+    <span>база <b>{{ (st.base_bps / 1e6)|round(1) if st.base_bps is not none else '—' }}</b> Мбит/с</span>
+    <span>онлайн <b>{{ st.users_online if st.users_online is not none else '—' }}</b></span>
+    {% if st.drop_at %}<span class="bad">обрыв с {{ st.drop_at|dt }} ({{ st.drop_at|duration }}), было {{ (st.drop_base_bps / 1e6)|round(1) }} Мбит/с</span>
+    {% elif st.below_since %}<span class="warn">ниже порога {{ st.below_since|duration }}</span>{% endif %}
+  </div>
+  <svg class="tchart" viewBox="0 0 1000 120" preserveAspectRatio="none" role="img" aria-label="трафик за сутки">
+    <path d="{{ c.svg.fill }}" class="fill"/>
+    <path d="{{ c.svg.line }}" class="line" vector-effect="non-scaling-stroke"/>
+    <path d="{{ c.svg.users }}" class="users" vector-effect="non-scaling-stroke"/>
+  </svg>
+  <div class="tlegend muted"><span>{{ c.chart.start|dt }}</span>
+    <span><i class="l"></i>трафик, до {{ c.svg.top_mbps }} Мбит/с &nbsp; <i class="u"></i>онлайн, до {{ c.svg.top_users }}</span>
+    <span>сейчас</span></div>
+</div>
+{% endfor %}
+
 <div class="card">
   <h2>Ноды источников{% if linked|length > 1 %} (связаны — проверка одна){% endif %}</h2>
   <table>
@@ -66,6 +88,7 @@
     <button type="submit" class="secondary" style="white-space:nowrap">Связать</button>
   </form>
 </div>
+
 
 {% if incidents %}
 <div class="card">

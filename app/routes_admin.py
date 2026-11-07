@@ -4,7 +4,7 @@
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from . import auth, db, jobs, nodes, routes_status, settings, sources, views
+from . import auth, db, jobs, nodes, routes_status, settings, sources, traffic, views
 
 router = APIRouter()
 
@@ -137,6 +137,18 @@ def sync_one(request: Request, sn_id: int):
 # ---------- admin: карточка цели проверки и связывание ----------
 
 
+def _traffic_charts(node_id):
+    """Графики трафика за сутки — по каждой ноде Remnawave в этой цели."""
+    out = []
+    for sn in nodes.linked(node_id):
+        if sn["source_type"] != "remnawave":
+            continue
+        ch = traffic.chart(sn["id"])
+        if ch:
+            out.append({"sn": sn, "chart": ch, "svg": traffic.svg_paths(ch)})
+    return out
+
+
 @router.get("/node/{node_id}")
 def node_page(request: Request, node_id: str):
     auth.require_admin(request)
@@ -165,6 +177,7 @@ def node_page(request: Request, node_id: str):
         "node.html",
         node=node,
         linked=nodes.linked(node_id),
+        charts=_traffic_charts(node_id),
         hist=hist,
         mismatch=nodes.address_mismatch(node_id),
         same=nodes.same_address_targets(node_id),

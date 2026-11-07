@@ -112,6 +112,27 @@ CREATE TABLE IF NOT EXISTS node_state (
     updated_at   INTEGER
 );
 
+-- замеры трафика нод Remnawave (раз в минуту, хранятся 2 суток): счётчики интерфейса сервера и онлайн
+CREATE TABLE IF NOT EXISTS traffic_samples (
+    sn_id         INTEGER NOT NULL,           -- source_nodes.id
+    ts            INTEGER NOT NULL,
+    rx_total      INTEGER,
+    tx_total      INTEGER,
+    users_online  INTEGER,
+    PRIMARY KEY (sn_id, ts)
+);
+-- состояние проверки «обрыв трафика» по ноде источника
+CREATE TABLE IF NOT EXISTS traffic_state (
+    sn_id          INTEGER PRIMARY KEY,
+    rate_bps       REAL,                      -- средняя за 5 мин
+    base_bps       REAL,                      -- медиана средней за предыдущий час
+    users_online   INTEGER,
+    below_since    INTEGER,                   -- с какого момента ниже порога (ещё не обрыв)
+    drop_at        INTEGER,                   -- открытый обрыв: начало
+    drop_base_bps  REAL,                      -- база на момент обрыва
+    updated_at     INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS incidents (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     node_id          TEXT NOT NULL,

@@ -5,7 +5,7 @@ import time
 
 from fastapi.templating import Jinja2Templates
 
-from . import auth, checkers, db, nodes, settings, state
+from . import auth, checkers, db, nodes, settings, state, traffic
 
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
@@ -104,6 +104,7 @@ def nodes_with_state(source_id=None):
         "COALESCE(ns.ok_streak, 0) AS ok_streak, ns.ok_since, "
         "n.is_active AS target_active, ns.updated_at AS checked_at, ns.up_count, ns.down_count, "
         "(SELECT opened_at FROM incidents i WHERE i.id = ns.incident_id AND i.closed_at IS NULL) AS incident_since, "
+        "(SELECT drop_at FROM traffic_state t WHERE t.sn_id = sn.id) AS traffic_drop_at, "
         "(SELECT COUNT(*) FROM source_nodes x WHERE x.node_id = n.id) AS linked_count "
         "FROM source_nodes sn JOIN nodes n ON n.id = sn.node_id "
         "LEFT JOIN node_state ns ON ns.node_id = n.id"
@@ -134,8 +135,12 @@ EMPTY_HISTORY = {"bars": [], "uptime": None, "latency": None}
 def revivable(r):
     """Неактивная нода, которую все online-чекеры видят рабочей revive_ok_streak проверок подряд."""
     need = settings.get("revive_ok_streak")
-    return bool(need > 0 and not r.get("target_active", 1) and r.get("probe_color") == "green"
-                and (r.get("ok_streak") or 0) >= need)
+    return bool(
+        need > 0
+        and not r.get("target_active", 1)
+        and r.get("probe_color") == "green"
+        and (r.get("ok_streak") or 0) >= need
+    )
 
 
 def view_state(r):
@@ -242,6 +247,23 @@ def active_alerts():
                 "text": f"не видят {down} из {up + down} чекеров" if up + down else "нет свежих данных",
                 "since": r["opened_at"],
                 "href": f"/node/{r['node_id']}",
+            }
+        )
+    for d in traffic.open_drops():
+        rate, base = traffic.mbps(d["rate_bps"]), traffic.mbps(d["drop_base_bps"])
+        drop = round(100 - 100 * (d["rate_bps"] or 0) / d["drop_base_bps"]) if d["drop_base_bps"] else 0
+        users = f" · онлайн {d['users_online']}" if d["users_online"] is not None else ""
+        out.append(
+            {
+                "kind": "traffic",
+                "color": "orange",
+                "title": d["name"] or d["external_id"],
+                "country": d["country"],
+                "sources": d["source"],
+                "address": d["address"],
+                "text": f"обрыв трафика: {base} → {rate} Мбит/с (−{drop}%){users}",
+                "since": d["drop_at"],
+                "href": f"/node/{d['node_id']}",
             }
         )
     for c in checkers.all_checkers():
