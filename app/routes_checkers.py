@@ -23,7 +23,10 @@ def _panel_arg(request: Request):
     base = str(url).rstrip("/")
     if url.hostname in LOCAL_HOSTS:
         return base, "Локальный адрес панели — с другой машины чекер до него не достучится. Задай ADMIN_HOST в .env."
-    return base, "Панель открыта по http — чекер откажется подключаться. Задай ADMIN_HOST в .env или, в доверенной локальной сети, добавь -e ALLOW_HTTP=1."
+    return (
+        base,
+        "Панель открыта по http — чекер откажется подключаться. Задай ADMIN_HOST в .env или, в доверенной локальной сети, добавь -e ALLOW_HTTP=1.",
+    )
 
 
 def _page(request: Request, new_token=None, **extra):

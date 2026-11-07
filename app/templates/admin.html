@@ -1,13 +1,29 @@
 {% extends "base.html" %}
+{% from "_nodes.html" import pulse, stats_block, toolbar, node_card, filter_script %}
 {% block content %}
+
+<section class="card alerts">
+  <h2>Активные оповещения{% if alerts %} <span class="count">{{ alerts|length }}</span>{% endif %}</h2>
+  {% for a in alerts %}
+  <a class="alert {{ a.color }}" href="{{ a.href }}">
+    {{ pulse(a.color) }}
+    <span class="what">
+      <span><b>{{ a.title }}</b>{% if a.sources %} <span class="muted">· {{ a.sources }}</span>{% endif %}</span>
+      <span class="muted">{% if a.address %}<code>{{ a.address }}</code> · {% endif %}{{ a.text }}</span>
+    </span>
+    <span class="since" title="{{ a.since|dt }}">{% if a.since %}{{ a.since|duration }}{% endif %}</span>
+  </a>
+  {% else %}
+  <div class="allok">{{ pulse('green') }} Всё работает — открытых инцидентов нет, все чекеры на связи</div>
+  {% endfor %}
+</section>
+
 <div class="tabs">
   {% for t in tabs %}
   <a href="/?source={{ t.key }}" class="{{ 'active' if source and t.key == source.id }}">
     {{ t.label }}
     <span class="muted">{{ t.counts.total }}</span>
-    <span class="dot green"></span>{{ t.counts.green }}
-    <span class="dot orange"></span>{{ t.counts.orange }}
-    <span class="dot red"></span>{{ t.counts.red }}
+    {% if t.counts.orange or t.counts.red %}<span class="dot red"></span>{{ t.counts.orange + t.counts.red }}{% endif %}
   </a>
   {% endfor %}
 </div>
@@ -15,38 +31,34 @@
 {% if not source %}
 <p class="muted">Источников пока нет. Добавь панель Remnawave или Open60 на странице <a href="/sources">Источники</a>.</p>
 {% else %}
-<div class="summary">
-  <span><span class="dot green"></span>работает</span>
-  <span><span class="dot orange"></span>недоступна у части чекеров</span>
-  <span><span class="dot red"></span>недоступна у всех</span>
-  <span><span class="dot grey"></span>нет свежих данных</span>
-  <form method="post" action="/check">
+
+<h2 class="section">Все системы
+  <span class="muted sync">синхронизация {{ source.last_sync_at|ago }}{% if source.last_sync_msg %}: <span class="{{ 'ok' if source.last_sync_ok else 'bad' }}">{{ source.last_sync_msg }}</span>{% endif %}</span>
+</h2>
+{{ stats_block(stats, checkers) }}
+
+{% call toolbar() %}
+  <form method="post" action="/check" class="inline">
     <input type="hidden" name="source_id" value="{{ source.id }}">
-    <input type="text" name="target" placeholder="домен, IP или IP:порт" style="width:200px">
+    <input type="text" name="target" placeholder="домен, IP или IP:порт" style="width:190px">
     <button type="submit">Проверить</button>
   </form>
-  <form method="post" action="/sync">
+  <form method="post" action="/sync" class="inline">
     <input type="hidden" name="source_id" value="{{ source.id }}">
-    <button type="submit" class="secondary" title="{{ source.last_sync_msg }}">Синхронизировать все</button>
+    <button type="submit" class="secondary" title="{{ source.last_sync_msg }}">Синхронизировать</button>
   </form>
-</div>
-<p class="muted" style="margin-top:-8px">
-  Синхронизация {{ source.last_sync_at|ago }}{% if source.last_sync_msg %}: <span class="{{ 'ok' if source.last_sync_ok else 'bad' }}">{{ source.last_sync_msg }}</span>{% endif %}
-</p>
+{% endcall %}
 
 {% if not rows %}<p class="muted">В этом источнике нод нет.</p>{% endif %}
-
-<div class="grid">
-{% for r in rows %}
-  <a class="tile {{ r.color }}" href="/node/{{ r.node_id }}">
-    <div class="name">{{ r.name or '—' }}{% if r.linked_count > 1 %}<span class="badge" title="связана с нодами других источников">связь ×{{ r.linked_count }}</span>{% endif %}</div>
-    <div class="sub"><code>{{ r.address }}</code>{% if r.fresh_port %} :{{ r.fresh_port }}{% endif %}</div>
-    <div class="sub">{{ COLOR_LABEL[r.color] }}{% if r.checked_at %} · {{ r.checked_at|ago }}{% endif %}{% if not r.is_active %} · неактивна{% endif %}</div>
-    {% if r.flags %}<div class="flags">{{ r.flags }}</div>{% endif %}
-    {% if r.mismatch %}<div class="warn">адрес отличается от основной ноды ({{ r.target_address }})</div>
-    {% elif r.dup and r.linked_count == 1 %}<div class="warn">такой адрес есть у другой ноды — связать?</div>{% endif %}
-  </a>
-{% endfor %}
+<div class="ngrid">
+{% for r in rows %}{{ node_card(r, href='/node/' ~ r.node_id, admin=True) }}{% endfor %}
 </div>
+<p class="muted" id="empty" hidden>Ничего не найдено</p>
+<p class="legend muted">
+  Полоса — последние 30 интервалов проверки:
+  <i class="green"></i>все чекеры ок <i class="yellow"></i>SSH есть, прокси нет <i class="orange"></i>часть чекеров не видит
+  <i class="red"></i>не видит никто <i></i>нет данных
+</p>
+{{ filter_script() }}
 {% endif %}
 {% endblock %}

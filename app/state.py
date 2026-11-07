@@ -2,11 +2,15 @@
 
 Результат одного чекера: green / yellow / red. Негативный — всё, что не green.
 Чекер считает ноду упавшей после двух негативных подряд (fail_streak >= 2), один green сбрасывает счётчик.
+Защита от разовых сбоев — только для адреса, который этот чекер уже видел живым (seen_alive: SSH прошёл,
+green или yellow). Пока не видел — упавшей считается с первого же негативного результата.
 Агрегат (цвет плитки) по живым (online) чекерам со свежим результатом:
   нет свежих результатов           → grey
   никто не считает упавшей         → green
   часть считает упавшей            → orange
   все считают упавшей              → red
+Неактивная нода (отключена в источнике) тоже проверяется, но цвет плитки у неё всегда grey: инцидентов и
+алертов нет. То, что видят чекеры, лежит в node_state.probe_color — по нему видно, можно ли вернуть ноду в дело.
 Результат по устаревшей ревизии / не тому адресу сохраняется (stale=1), но в состоянии не учитывается.
 
 Инциденты и алерты (по агрегату):
@@ -97,11 +101,13 @@ def _update_checker_state(node_id, checker_id, state, ts):
     if row and row["last_ts"] and ts < row["last_ts"]:
         return  # пришёл старее уже учтённого
     streak = 0 if state == "green" else ((row["fail_streak"] if row else 0) + 1)
+    alive = 1 if state in ("green", "yellow") or (row and row["seen_alive"]) else 0
     db.x(
-        "INSERT INTO node_checker_state(node_id, checker_id, last_state, fail_streak, last_ts) VALUES(?,?,?,?,?) "
+        "INSERT INTO node_checker_state(node_id, checker_id, last_state, fail_streak, seen_alive, last_ts) "
+        "VALUES(?,?,?,?,?,?) "
         "ON CONFLICT(node_id, checker_id) DO UPDATE SET last_state=excluded.last_state, "
-        "fail_streak=excluded.fail_streak, last_ts=excluded.last_ts",
-        (node_id, checker_id, state, streak, ts),
+        "fail_streak=excluded.fail_streak, seen_alive=excluded.seen_alive, last_ts=excluded.last_ts",
+        (node_id, checker_id, state, streak, alive, ts),
     )
 
 
@@ -116,7 +122,7 @@ def aggregate(node_id, online=None, now=None):
         last_ts = max(last_ts or 0, r["last_ts"] or 0) or None
         if r["checker_id"] not in online or not r["last_ts"] or r["last_ts"] < fresh:
             continue
-        if r["fail_streak"] >= FAIL_THRESHOLD:
+        if r["fail_streak"] >= (FAIL_THRESHOLD if r["seen_alive"] else 1):
             down += 1
         else:
             up += 1
@@ -136,15 +142,18 @@ def recompute(node_id, online=None, now=None):
 
     node_state.updated_at — время последнего результата (для «проверена N мин назад»).
     """
-    color, up, down, last_ts = aggregate(node_id, online, now)
+    probe, up, down, last_ts = aggregate(node_id, online, now)
+    node = db.q1("SELECT is_active FROM nodes WHERE id=?", (node_id,))
+    color = probe if node and node["is_active"] else "grey"
     with _lock:
         row = db.q1("SELECT color FROM node_state WHERE node_id=?", (node_id,))
         old = row["color"] if row else "grey"
         db.x(
-            "INSERT INTO node_state(node_id, color, up_count, down_count, updated_at) VALUES(?,?,?,?,?) "
-            "ON CONFLICT(node_id) DO UPDATE SET color=excluded.color, up_count=excluded.up_count, "
-            "down_count=excluded.down_count, updated_at=excluded.updated_at",
-            (node_id, color, up, down, last_ts),
+            "INSERT INTO node_state(node_id, color, probe_color, up_count, down_count, updated_at) "
+            "VALUES(?,?,?,?,?,?) "
+            "ON CONFLICT(node_id) DO UPDATE SET color=excluded.color, probe_color=excluded.probe_color, "
+            "up_count=excluded.up_count, down_count=excluded.down_count, updated_at=excluded.updated_at",
+            (node_id, color, probe, up, down, last_ts),
         )
         _incident_step(node_id, old, color, up, down)
     return old, color

@@ -1,0 +1,108 @@
+{# Общие блоки главной (admin) и status-страницы: шарик, счётчики «Все системы», карточка ноды, фильтры. #}
+
+{% macro pulse(color) -%}
+<span class="pulse {{ color }}"></span>
+{%- endmacro %}
+
+{% macro stats_block(st, checkers=None) %}
+<section class="stats">
+  <div class="stat"><div class="num">{{ st.total }}</div><div class="lbl">Всего нод</div></div>
+  <div class="stat"><div class="num ok">{{ st.up }}</div><div class="lbl">Работают</div></div>
+  <div class="stat"><div class="num {{ 'bad' if st.down else 'muted' }}">{{ st.down }}</div><div class="lbl">Упали</div></div>
+  <div class="stat"><div class="num muted">{{ st.unknown + st.inactive }}</div><div class="lbl">Нет данных{% if st.inactive %} · неактивных {{ st.inactive }}{% endif %}</div></div>
+  {% if checkers %}
+  <div class="stat"><div class="num {{ 'ok' if checkers.online == checkers.total and checkers.total else 'bad' }}">{{ checkers.online }}<span class="unit">/{{ checkers.total }}</span></div><div class="lbl">Чекеры online</div></div>
+  {% endif %}
+  {% if st.latency is not none %}
+  <div class="stat"><div class="num">{{ st.latency }}<span class="unit">мс</span></div><div class="lbl">Задержка прокси</div></div>
+  {% endif %}
+</section>
+{% endmacro %}
+
+{% macro toolbar() %}
+<div class="toolbar">
+  <input type="search" id="q" placeholder="Поиск по имени или адресу…" autocomplete="off">
+  <div class="seg" id="seg">
+    <button type="button" data-f="all" class="on">Все</button>
+    <button type="button" data-f="up">Работают</button>
+    <button type="button" data-f="down">Упавшие</button>
+    <button type="button" data-f="inactive">Неактивные</button>
+  </div>
+  {{ caller() if caller }}
+</div>
+{% endmacro %}
+
+{% macro bars(r) %}
+<div class="bars" title="последние {{ r.bars|length or 30 }} интервалов проверки">
+  {% if r.bars %}
+    {% for b in r.bars %}<i class="{{ b.color }}" title="{{ b.ts|dt }} — {% if b.n %}{{ b.ok }} из {{ b.n }} ок{% else %}нет данных{% endif %}"></i>{% endfor %}
+  {% else %}
+    {% for _ in range(30) %}<i></i>{% endfor %}
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro node_card(r, href=None, admin=False) %}
+{% set dot = r.color if r.target_active else 'grey' %}
+<{{ 'a' if href else 'div' }} class="ncard {{ dot }}"{% if href %} href="{{ href }}"{% endif %}
+  data-f="{{ r.view }}" data-q="{{ (r.name ~ ' ' ~ r.address)|lower }}">
+  <div class="top">
+    {{ pulse(dot) }}
+    <span class="name">{{ r.name or '—' }}</span>
+    {% if admin and r.linked_count > 1 %}<span class="badge" title="связана с нодами других источников">×{{ r.linked_count }}</span>{% endif %}
+    <span class="meta">
+      {% if r.latency is not none %}<span class="lat">{{ r.latency }} мс</span>{% endif %}
+      {% if r.uptime is not none %}<span class="up {{ 'ok' if r.uptime >= 99 else ('warn' if r.uptime >= 90 else 'bad') }}">{{ r.uptime }}%</span>{% endif %}
+    </span>
+  </div>
+  <div class="sub"><code>{{ r.address }}</code>{% if r.fresh_port %}:{{ r.fresh_port }}{% endif %}</div>
+  {{ bars(r) }}
+  <div class="foot">
+    <span>
+    {%- if not r.target_active -%}
+      неактивна{% if r.probe_color and r.probe_color != 'grey' %} · проверки: {{ COLOR_LABEL[r.probe_color] }}{% endif %}
+    {%- else -%}
+      {{ COLOR_LABEL[r.color] }}{% if r.incident_since %} · {{ r.incident_since|duration }}{% endif %}
+      {%- if admin and not r.is_active %} · неактивна в источнике{% endif %}
+    {%- endif -%}
+    </span>
+    <span>{{ r.checked_at|ago if r.checked_at else '' }}</span>
+  </div>
+  {% if admin %}
+    {% if r.flags %}<div class="flags">{{ r.flags }}</div>{% endif %}
+    {% if r.mismatch %}<div class="warn">адрес отличается от основной ноды ({{ r.target_address }})</div>
+    {% elif r.dup and r.linked_count == 1 %}<div class="warn">такой адрес есть у другой ноды — связать?</div>{% endif %}
+  {% endif %}
+</{{ 'a' if href else 'div' }}>
+{% endmacro %}
+
+{% macro filter_script() %}
+<script>
+// Поиск и фильтр по карточкам; состояние переживает автообновление страницы (раз в 30 с).
+(function () {
+  const KEY = 'nodecheck.filter.' + location.pathname + location.search;
+  const q = document.getElementById('q'), seg = document.getElementById('seg');
+  const cards = [...document.querySelectorAll('.ncard')];
+  const empty = document.getElementById('empty');
+  let st = {q: '', f: 'all'};
+  try { st = Object.assign(st, JSON.parse(sessionStorage.getItem(KEY) || '{}')); } catch (e) {}
+  function apply() {
+    const needle = st.q.trim().toLowerCase();
+    let shown = 0;
+    for (const c of cards) {
+      const ok = (st.f === 'all' || c.dataset.f === st.f) && (!needle || c.dataset.q.includes(needle));
+      c.hidden = !ok; if (ok) shown++;
+    }
+    if (empty) empty.hidden = shown > 0 || !cards.length;
+    for (const b of seg.children) b.classList.toggle('on', b.dataset.f === st.f);
+    try { sessionStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {}
+  }
+  q.value = st.q;
+  q.addEventListener('input', () => { st.q = q.value; apply(); });
+  seg.addEventListener('click', e => { if (e.target.dataset.f) { st.f = e.target.dataset.f; apply(); } });
+  apply();
+  // автообновление, но не пока человек печатает
+  setInterval(() => { if (document.activeElement !== q && !document.hidden) location.reload(); }, 30000);
+})();
+</script>
+{% endmacro %}

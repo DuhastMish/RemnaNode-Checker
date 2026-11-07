@@ -52,6 +52,58 @@ pre{background:#0f1115;border:1px solid var(--border);border-radius:8px;padding:
 .muted{color:var(--muted)}
 .ok{color:var(--green)}.bad{color:var(--red)}
 @media (max-width:700px){.row{grid-template-columns:1fr}}
+
+/* --- главная: шарик, оповещения, «Все системы», карточки с полосой --- */
+.pulse{position:relative;display:inline-block;flex:none;width:10px;height:10px;border-radius:50%;background:var(--grey);vertical-align:middle}
+.pulse.green{background:var(--green)}.pulse.yellow{background:var(--yellow)}.pulse.orange{background:var(--orange)}.pulse.red{background:var(--red)}
+.pulse:not(.grey)::after{content:"";position:absolute;inset:0;border-radius:50%;background:inherit;animation:pulse 2s ease-out infinite}
+.pulse.red::after,.pulse.orange::after{animation-duration:1.2s}
+@keyframes pulse{0%{transform:scale(1);opacity:.55}100%{transform:scale(2.8);opacity:0}}
+@media (prefers-reduced-motion:reduce){.pulse::after{animation:none!important}}
+h2.section{font-size:17px;margin:4px 0 12px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+h2.section .sync{font-size:13px;font-weight:400}
+.alerts h2{display:flex;align-items:center;gap:8px}
+.alerts .count{font-size:12px;background:var(--red);color:#fff;border-radius:10px;padding:0 8px}
+.alert{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-left:3px solid var(--red);border-radius:8px;margin-top:8px;color:var(--text)}
+.alert.orange{border-left-color:var(--orange)}.alert.grey{border-left-color:var(--grey)}
+a.alert:hover{background:#1d2129}
+.alert .what{display:flex;flex-direction:column;min-width:0}
+.alert .what>*{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.alert .since{margin-left:auto;color:var(--muted);font-size:13px;white-space:nowrap}
+.allok{display:flex;align-items:center;gap:12px;color:var(--muted)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.stat .num{font-size:28px;font-weight:500;line-height:1.2}
+.stat .unit{font-size:14px;color:var(--muted);margin-left:2px}
+.stat .lbl{color:var(--muted);font-size:13px}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.toolbar input[type=search]{flex:1;min-width:200px;width:auto}
+.toolbar form.inline{display:flex;gap:8px}
+.seg{display:flex;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:3px}
+.seg button{background:none;border:0;color:var(--muted);padding:5px 12px;border-radius:6px}
+.seg button.on{background:#2a2f3a;color:var(--text)}
+.ngrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.ncard{display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text)}
+a.ncard:hover{border-color:#3a4150}
+.ncard[hidden]{display:none}
+.ncard .top{display:flex;align-items:center;gap:10px;min-width:0}
+.ncard .name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ncard .meta{margin-left:auto;display:flex;gap:8px;font-size:13px;white-space:nowrap}
+.ncard .lat{color:var(--muted)}
+.ncard .up.ok{color:var(--green)}.ncard .up.warn{color:var(--orange)}.ncard .up.bad{color:var(--red)}
+.ncard .sub{color:var(--muted);font-size:13px;margin:2px 0 8px 20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ncard .foot{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:12px;margin-top:6px}
+.ncard .foot span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ncard .flags{color:var(--yellow);font-size:12px}.ncard .warn{color:var(--orange);font-size:12px}
+.ncard.grey .name{color:var(--muted)}
+.bars{display:flex;gap:2px;height:22px}
+.bars i,.legend i{flex:1;border-radius:2px;background:#2a2f3a}
+.bars i.green,.legend i.green{background:var(--green)}.bars i.yellow,.legend i.yellow{background:var(--yellow)}
+.bars i.orange,.legend i.orange{background:var(--orange)}.bars i.red,.legend i.red{background:var(--red)}
+.legend{font-size:12px;margin-top:14px}
+.legend i{display:inline-block;width:8px;height:12px;margin:0 4px 0 10px;vertical-align:middle}
+@media (max-width:700px){.ngrid{grid-template-columns:1fr}.toolbar form.inline{width:100%}.toolbar form.inline input{flex:1}
+.seg{width:100%}.seg button{flex:1;padding:5px 4px}}
 </style>
 </head>
 <body>

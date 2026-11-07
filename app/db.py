@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS node_checker_state (
     checker_id   TEXT NOT NULL,
     last_state   TEXT,
     fail_streak  INTEGER NOT NULL DEFAULT 0,
+    seen_alive   INTEGER NOT NULL DEFAULT 0,  -- чекер хоть раз видел адрес живым (SSH прошёл: green/yellow)
     last_ts      INTEGER,
     PRIMARY KEY (node_id, checker_id)
 );
@@ -98,7 +99,8 @@ CREATE TABLE IF NOT EXISTS node_checker_state (
 -- агрегированное состояние ноды (цвет плитки)
 CREATE TABLE IF NOT EXISTS node_state (
     node_id      TEXT PRIMARY KEY,
-    color        TEXT NOT NULL DEFAULT 'grey',
+    color        TEXT NOT NULL DEFAULT 'grey',  -- цвет плитки: у неактивной ноды всегда grey
+    probe_color  TEXT,                          -- что видят чекеры (агрегат), в т.ч. у неактивной ноды
     up_count     INTEGER DEFAULT 0,
     down_count   INTEGER DEFAULT 0,
     incident_id  INTEGER,
@@ -192,4 +194,18 @@ def init():
     os.makedirs(config.DATA_DIR, exist_ok=True)
     c = conn()
     c.executescript(SCHEMA)
+    # миграции существующих баз
+    cols = {r[1] for r in c.execute("PRAGMA table_info(node_state)")}
+    if "probe_color" not in cols:
+        c.execute("ALTER TABLE node_state ADD COLUMN probe_color TEXT")
+    cols = {r[1] for r in c.execute("PRAGMA table_info(node_checker_state)")}
+    if "seen_alive" not in cols:
+        c.execute("ALTER TABLE node_checker_state ADD COLUMN seen_alive INTEGER NOT NULL DEFAULT 0")
+        # по истории: был ли от этого чекера живой результат по текущему адресу цели
+        c.execute(
+            "UPDATE node_checker_state SET seen_alive = 1 WHERE EXISTS (SELECT 1 FROM results r "
+            "JOIN nodes n ON n.id = r.node_id WHERE r.node_id = node_checker_state.node_id "
+            "AND r.checker_id = node_checker_state.checker_id AND r.stale = 0 "
+            "AND r.target_address = n.address AND r.state IN ('green', 'yellow'))"
+        )
     c.commit()

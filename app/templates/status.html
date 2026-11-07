@@ -1,30 +1,35 @@
 {% extends "base.html" %}
+{% from "_nodes.html" import pulse, stats_block, toolbar, node_card, filter_script %}
 {% block content %}
 <div class="tabs">
   {% for t in tabs %}
   <a href="/?source={{ t.key }}" class="{{ 'active' if t.key == source_id }}">
     {{ t.label }} <span class="muted">{{ t.counts.total }}</span>
-    <span class="dot green"></span>{{ t.counts.green }}
-    <span class="dot orange"></span>{{ t.counts.orange }}
-    <span class="dot red"></span>{{ t.counts.red }}
+    {% if t.counts.orange or t.counts.red %}<span class="dot red"></span>{{ t.counts.orange + t.counts.red }}{% endif %}
   </a>
   {% endfor %}
 </div>
-<div class="summary">
-  <span><span class="dot green"></span>работает</span>
-  <span><span class="dot orange"></span>недоступна у части чекеров</span>
-  <span><span class="dot red"></span>недоступна</span>
-  <span><span class="dot grey"></span>нет данных</span>
-</div>
-<div class="grid">
-{% for r in rows %}
-  <div class="tile {{ r.color }}">
-    <div class="name">{{ r.name }}</div>
-    <div class="sub"><code>{{ r.address }}</code></div>
-    <div class="sub">{{ COLOR_LABEL[r.color] }}{% if r.checked_at %} · {{ r.checked_at|ago }}{% endif %}</div>
+
+{% set down = rows|selectattr('view', 'equalto', 'down')|list %}
+<section class="card alerts">
+  <h2>Активные оповещения{% if down %} <span class="count">{{ down|length }}</span>{% endif %}</h2>
+  {% for r in down %}
+  <div class="alert {{ r.color }}">
+    {{ pulse(r.color) }}
+    <span class="what"><span><b>{{ r.name }}</b></span><span class="muted"><code>{{ r.address }}</code> · {{ COLOR_LABEL[r.color] }}</span></span>
+    <span class="since">{% if r.incident_since %}{{ r.incident_since|duration }}{% endif %}</span>
   </div>
-{% else %}
-  <p class="muted">Данных пока нет</p>
-{% endfor %}
+  {% else %}
+  <div class="allok">{{ pulse('green') }} Всё работает</div>
+  {% endfor %}
+</section>
+
+<h2 class="section">Все системы</h2>
+{{ stats_block(stats) }}
+{% call toolbar() %}{% endcall %}
+<div class="ngrid">
+{% for r in rows %}{{ node_card(r) }}{% else %}<p class="muted">Данных пока нет</p>{% endfor %}
 </div>
+<p class="muted" id="empty" hidden>Ничего не найдено</p>
+{{ filter_script() }}
 {% endblock %}

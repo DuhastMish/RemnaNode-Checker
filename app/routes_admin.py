@@ -56,9 +56,10 @@ def index(request: Request):
         "admin.html",
         source=sources.get(source_id) if source_id else None,
         rows=rows,
-        counts=views.counts(rows),
+        stats=views.stats(rows),
+        checkers=views.checker_stats(),
+        alerts=views.active_alerts(),
         tabs=tabs,
-        refresh=30,
         title="Ноды",
     )
 
@@ -87,7 +88,7 @@ def check_post(request: Request, source_id: str = Form(""), node_id: str = Form(
             r["node_id"]
             for r in db.q(
                 "SELECT DISTINCT n.id AS node_id FROM source_nodes sn JOIN nodes n ON n.id = sn.node_id "
-                "WHERE sn.source_id=? AND n.is_active=1",
+                "WHERE sn.source_id=?",
                 (source_id,),
             )
         ]
@@ -140,7 +141,8 @@ def sync_one(request: Request, sn_id: int):
 def node_page(request: Request, node_id: str):
     auth.require_admin(request)
     node = db.q1(
-        "SELECT n.*, COALESCE(ns.color, 'grey') AS color, ns.updated_at AS checked_at, "
+        "SELECT n.*, COALESCE(ns.color, 'grey') AS color, COALESCE(ns.probe_color, 'grey') AS probe_color, "
+        "ns.updated_at AS checked_at, "
         "ns.up_count, ns.down_count FROM nodes n LEFT JOIN node_state ns ON ns.node_id = n.id "
         "WHERE n.id=?",
         (node_id,),

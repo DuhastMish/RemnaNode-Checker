@@ -6,6 +6,7 @@
   fresh_port — у основной, а если у неё нет — первый непустой у связанных (Open60 даёт порт прокси);
   is_active  — активна, если активна хоть одна связанная.
 Любое изменение этих атрибутов повышает nodes.rev и глобальный nodes_revision.
+Смена адреса сбрасывает node_checker_state.seen_alive: новый адрес ещё никто не видел живым.
 """
 
 import threading
@@ -85,6 +86,8 @@ def recompute(node_id):
             "UPDATE nodes SET address=?, fresh_port=?, is_active=?, rev=rev+1, updated_at=? WHERE id=?",
             (address, port, active, int(time.time()), node_id),
         )
+        if node["address"] != address:
+            db.x("UPDATE node_checker_state SET seen_alive=0 WHERE node_id=?", (node_id,))
         _bump_revision()
         return {"changed": True, "deleted": False, "old_address": node["address"], "new_address": address}
 

@@ -25,6 +25,14 @@ def _public(rows):
             "color": r["color"],
             "checked_at": r["checked_at"],
             "flags": r["flags"],
+            "target_active": r["target_active"],
+            "is_active": bool(r["target_active"]),
+            "view": r["view"],
+            "bars": r["bars"],
+            "uptime": r["uptime"],
+            "latency": r["latency"],
+            "incident_since": r["incident_since"],
+            "probe_color": None,
         }
         for r in rows
     ]
@@ -40,9 +48,8 @@ def index(request: Request):
         "status.html",
         source_id=source_id,
         rows=_public(rows),
-        counts=views.counts(rows),
+        stats=views.stats(rows),
         tabs=tabs,
-        refresh=30,
         title="Статус",
     )
 

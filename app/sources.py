@@ -204,12 +204,8 @@ def sync_node(source_node_id):
 
 
 def urgent_check(node_ids):
-    """Внеочередная проверка изменившихся (в т.ч. новых) активных целей — не ждать планового интервала."""
-    targets = []
-    for node_id in node_ids:
-        n = db.q1("SELECT is_active FROM nodes WHERE id=?", (node_id,))
-        if n and n["is_active"]:
-            targets.append(jobs.target_for_node(node_id))
+    """Внеочередная проверка изменившихся (в т.ч. новых) целей — не ждать планового интервала."""
+    targets = [t for t in (jobs.target_for_node(node_id) for node_id in node_ids) if t]
     return jobs.create(targets, "sync")
 
 
