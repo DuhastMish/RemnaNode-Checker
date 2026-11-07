@@ -25,18 +25,24 @@ function copyPre(id, btn){
 <div class="card">
   <h2>Чекеры</h2>
   <table>
-    <tr><th>Имя</th><th>Статус</th><th>Последний heartbeat</th><th>Версия</th><th>Внешний IP</th><th></th></tr>
+    <tr><th>Имя</th><th>Статус</th><th>Последний heartbeat</th><th>Версия</th><th>Сеть</th><th></th></tr>
     {% for c in checkers %}
     <tr>
       <td>{{ c.name }}<br><span class="muted" style="font-size:12px">{{ c.id }}</span></td>
       <td>
         {% if not c.enabled %}<span class="muted">отключён</span>
+        {% elif c.blocked %}<span style="color:var(--yellow)" title="IP чекера не из {{ countries }} — похоже, на машине чекера включён VPN">⚠ предположительно VPN</span>
+          <br><span class="muted" style="font-size:12px">IP вне {{ countries }} · результаты не учитываются</span>
         {% elif c.is_online %}<span class="ok">online</span>
         {% else %}<span class="bad">offline</span>{% endif %}
       </td>
       <td>{{ c.last_seen_at|ago }}</td>
       <td>{{ c.version or '—' }}</td>
-      <td><code>{{ c.public_ip or '—' }}</code></td>
+      <td>
+        <code>{{ c.public_ip or '—' }}</code>
+        {% if c.place %}<br><span style="font-size:13px">{% if c.geo_country %}<span class="flag" title="{{ c.geo_country }}">{{ c.geo_country|flag }}</span>{% endif %}{{ c.place }}</span>{% endif %}
+        {% if c.operator %}<br><span class="muted" style="font-size:12px">{{ c.operator }}</span>{% endif %}
+      </td>
       <td>
         <div class="actions" style="margin:0">
           {% if c.enabled %}
@@ -53,6 +59,10 @@ function copyPre(id, btn){
     <tr><td colspan="6" class="muted">Чекеров пока нет. Пока нет ни одного online-чекера, ноды не проверяются.</td></tr>
     {% endfor %}
   </table>
+  <p class="muted" style="font-size:12px">Место и оператор — по IP, приблизительно: для мобильного интернета город
+    часто показывается по шлюзу оператора.
+    {% if not geo_loaded %}Базы геолокации ещё не загружены (скачиваются в фоне).{% endif %}
+    <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a></p>
 </div>
 
 <div class="card">

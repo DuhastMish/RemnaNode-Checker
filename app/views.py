@@ -276,7 +276,7 @@ def active_alerts():
                     "country": "",
                     "sources": "",
                     "address": c["public_ip"] or "",
-                    "text": "нет heartbeat" if c["last_seen_at"] else "ещё не подключался",
+                    "text": checkers.offline_reason(c),
                     "since": c["last_seen_at"],
                     "href": "/checkers",
                 }

@@ -1,12 +1,19 @@
-"""Реестр чекеров: регистрация, токены (в базе только хэш), online/offline."""
+"""Реестр чекеров: регистрация, токены (в базе только хэш), online/offline, геолокация IP.
+
+Страна чекера: если IP чекера не из стран настройки checker_countries (на домашнем ПК включили VPN),
+чекер «заблокирован» — считается offline, задания ему не выдаются, его результаты отбрасываются.
+После возврата в свою страну (valid_since) принимаются только результаты, снятые после этого момента:
+то, что проверялось ещё через VPN, но отправлено уже без него, не учитывается.
+"""
 
 import hashlib
 import hmac
+import json
 import secrets
 import time
 import uuid
 
-from . import db, settings
+from . import db, geoip, settings
 
 TOKEN_PREFIX = "nck_"
 
@@ -57,15 +64,51 @@ def by_token(token):
     return None
 
 
-def touch(checker_id, version=None, public_ip=None):
+def touch(checker_id, version=None):
     now = int(time.time())
     if version is not None:
-        db.x(
-            "UPDATE checkers SET last_seen_at=?, version=?, public_ip=? WHERE id=?",
-            (now, version[:40], (public_ip or "")[:64], checker_id),
-        )
+        db.x("UPDATE checkers SET last_seen_at=?, version=? WHERE id=?", (now, version[:40], checker_id))
     else:
         db.x("UPDATE checkers SET last_seen_at=? WHERE id=?", (now, checker_id))
+
+
+def allowed_countries():
+    raw = settings.get("checker_countries") or ""
+    return {c.strip().upper() for c in raw.replace(";", ",").split(",") if c.strip()}
+
+
+def geo(row) -> dict:
+    try:
+        return json.loads(row["geo"] or "{}")
+    except (TypeError, ValueError, KeyError, IndexError):
+        return {}
+
+
+def blocked(row) -> bool:
+    """IP чекера из страны вне checker_countries. Страна неизвестна (частный IP, базы нет) — не блокируем."""
+    allowed = allowed_countries()
+    country = row["geo_country"] or ""
+    return bool(allowed and country and country not in allowed)
+
+
+def observe(row: dict, ip: str) -> dict:
+    """Каждый запрос чекера: запомнить IP и его геолокацию. Пересчёт — только при смене IP или баз."""
+    ip = (ip or "")[:64]
+    ver = geoip.version()
+    g = geo(row)
+    if ip == row["public_ip"] and g.get("ip") == ip and g.get("db") == ver:
+        return row
+    info = geoip.lookup(ip) or {}
+    was = blocked(row)
+    row.update(public_ip=ip, geo=json.dumps({**info, "ip": ip, "db": ver}, ensure_ascii=False))
+    row["geo_country"] = info.get("country") or ""
+    if was and not blocked(row):
+        row["valid_since"] = int(time.time())
+    db.x(
+        "UPDATE checkers SET public_ip=?, geo=?, geo_country=?, valid_since=? WHERE id=?",
+        (row["public_ip"], row["geo"], row["geo_country"], row["valid_since"], row["id"]),
+    )
+    return row
 
 
 def is_online(row, now=None) -> bool:
@@ -74,7 +117,16 @@ def is_online(row, now=None) -> bool:
         bool(row["enabled"])
         and bool(row["last_seen_at"])
         and now - row["last_seen_at"] <= settings.get("checker_offline_sec")
+        and not blocked(row)
     )
+
+
+def offline_reason(row) -> str:
+    """Почему чекер не online — для алертов и списка оповещений."""
+    if blocked(row):
+        where = geoip.place(geo(row)) or row["geo_country"]
+        return f"IP {row['public_ip']} вне {', '.join(sorted(allowed_countries()))} ({where}) — VPN? результаты не учитываются"
+    return "нет heartbeat" if row["last_seen_at"] else "ещё не подключался"
 
 
 def online_ids():
@@ -87,4 +139,8 @@ def all_checkers():
     rows = [dict(r) for r in db.q("SELECT * FROM checkers ORDER BY created_at")]
     for r in rows:
         r["is_online"] = is_online(r, now)
+        r["blocked"] = blocked(r)
+        g = geo(r)
+        r["place"] = geoip.place(g) if g.get("ip") == r["public_ip"] else ""
+        r["operator"] = geoip.operator(g) if g.get("ip") == r["public_ip"] else ""
     return rows

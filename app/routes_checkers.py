@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 
-from . import auth, checkers, config, settings, views
+from . import auth, checkers, config, geoip, settings, views
 
 router = APIRouter()
 
@@ -30,7 +30,13 @@ def _panel_arg(request: Request):
 
 
 def _page(request: Request, new_token=None, **extra):
-    ctx = dict(checkers=checkers.all_checkers(), image=settings.get("agent_image"), title="Чекеры")
+    ctx = dict(
+        checkers=checkers.all_checkers(),
+        image=settings.get("agent_image"),
+        countries=", ".join(sorted(checkers.allowed_countries())),
+        geo_loaded=geoip.loaded(),
+        title="Чекеры",
+    )
     if new_token:
         panel, warning = _panel_arg(request)
         ctx.update(new_token=new_token, panel_arg=panel, panel_warning=warning)

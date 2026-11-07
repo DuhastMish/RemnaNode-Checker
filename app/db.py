@@ -60,6 +60,9 @@ CREATE TABLE IF NOT EXISTS checkers (
     enabled       INTEGER NOT NULL DEFAULT 1,
     version       TEXT DEFAULT '',
     public_ip     TEXT DEFAULT '',
+    geo           TEXT DEFAULT '',            -- JSON геолокации public_ip (geoip.lookup + ip, версия баз)
+    geo_country   TEXT DEFAULT '',            -- ISO-код страны public_ip; вне checker_countries — VPN
+    valid_since   INTEGER,                    -- вернулся в свою страну: результаты старше не принимаем
     online        INTEGER NOT NULL DEFAULT 0, -- последнее известное состояние (для алертов о смене)
     created_at    INTEGER NOT NULL,
     last_seen_at  INTEGER
@@ -227,6 +230,9 @@ def init():
         ("node_state", "ok_since", "INTEGER"),
         ("node_checker_state", "ok_streak", "INTEGER NOT NULL DEFAULT 0"),
         ("node_checker_state", "ok_since", "INTEGER"),
+        ("checkers", "geo", "TEXT DEFAULT ''"),
+        ("checkers", "geo_country", "TEXT DEFAULT ''"),
+        ("checkers", "valid_since", "INTEGER"),
     ):
         if col not in {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:
             c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")

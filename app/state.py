@@ -259,18 +259,23 @@ def checker_transitions(now=None):
         if not r["enabled"]:
             continue
         event = "online" if on else "offline"
+        vpn = not on and checkers.blocked(r)
+        if on:
+            detail = " на связи"
+        elif vpn:
+            detail = f": {checkers.offline_reason(r)}"
+        else:
+            detail = f" пропал: нет heartbeat с {time.strftime('%H:%M:%S', time.localtime(r['last_seen_at'] or now))}"
         alerts.send_alert(
             {
                 "type": "checker",
                 "event": event,
-                "text": f"[CHECKER {event.upper()}] {r['name']}"
-                + (
-                    " на связи"
-                    if on
-                    else f" пропал: нет heartbeat с {time.strftime('%H:%M:%S', time.localtime(r['last_seen_at'] or now))}"
-                ),
+                "reason": "country" if vpn else ("" if on else "heartbeat"),
+                "text": f"[CHECKER {event.upper()}] {r['name']}{detail}",
                 "checker_id": r["id"],
                 "name": r["name"],
+                "public_ip": r["public_ip"],
+                "country": r["geo_country"],
                 "last_seen_at": r["last_seen_at"],
                 "ts": int(now),
             }

@@ -1,6 +1,8 @@
 """API для чекеров: /api/v1/agent/*. Авторизация — Bearer-токен чекера.
 
 Токен даёт доступ только сюда (не к UI). Отключённый чекер получает 403, его результаты не принимаются.
+Чекер с IP вне checker_countries (VPN) получает 200, но его результаты отбрасываются (ignored), а задания
+не выдаются — для панели он offline (см. checkers.blocked).
 Чекеру отдаётся только нужное для проверки: node_id, адрес, порт, ревизия. Без имён, источников, флагов.
 """
 
@@ -33,7 +35,7 @@ def _checker(request: Request):
         raise HTTPException(403, "checker disabled")
     if not api_limit.allow(row["id"]):
         raise HTTPException(429, "too many requests")
-    return row
+    return checkers.observe(row, ip)
 
 
 def config_payload():
@@ -59,7 +61,7 @@ async def _body(request: Request):
 async def hello(request: Request):
     ch = _checker(request)
     data = await _body(request)
-    checkers.touch(ch["id"], version=str(data.get("version") or ""), public_ip=auth.client_ip(request))
+    checkers.touch(ch["id"], version=str(data.get("version") or ""))
     return {"checker_id": ch["id"], "name": ch["name"], "heartbeat_sec": HEARTBEAT_SEC, **_revisions()}
 
 
@@ -67,7 +69,8 @@ async def hello(request: Request):
 def heartbeat(request: Request):
     ch = _checker(request)
     checkers.touch(ch["id"])
-    return {**_revisions(), "jobs": jobs.pending_for(ch["id"])}
+    # вне своей страны (VPN) заданий не выдаём: их результаты всё равно будут отброшены
+    return {**_revisions(), "jobs": [] if checkers.blocked(ch) else jobs.pending_for(ch["id"])}
 
 
 @router.get("/config")
@@ -104,14 +107,21 @@ async def results(request: Request):
     if not isinstance(items, list) or len(items) > 5000:
         raise HTTPException(400, "results: list expected (<= 5000)")
     items = [i for i in items if isinstance(i, dict)]
+    checkers.touch(ch["id"])
+    # вне своей страны (VPN) — не обрабатываем; после возврата — только снятое после возврата
+    if checkers.blocked(ch):
+        return {"accepted": 0, "duplicates": 0, "stale": 0, "ignored": len(items), "reason": "checker country"}
+    since = ch["valid_since"] or 0
+    fresh = [i for i in items if not (isinstance(i.get("ts"), int) and i["ts"] < since)]
+    ignored = len(items) - len(fresh)
+    items = fresh
     # job_id принимаем только для заданий, назначенных этому чекеру
     mine = {r["job_id"] for r in db.q("SELECT job_id FROM job_checkers WHERE checker_id=?", (ch["id"],))}
     for i in items:
         if i.get("job_id") not in mine:
             i["job_id"] = None
-    checkers.touch(ch["id"])
     accepted, dupes, stale = state.ingest(ch["id"], items)
-    return {"accepted": accepted, "duplicates": dupes, "stale": stale}
+    return {"accepted": accepted, "duplicates": dupes, "stale": stale, "ignored": ignored}
 
 
 @router.post("/jobs/{job_id}/ack")

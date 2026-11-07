@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import db, egress, export, jobs, settings, sources, state, traffic, tunnel
+from . import db, egress, export, geoip, jobs, settings, sources, state, traffic, tunnel
 
 sched = BackgroundScheduler(
     timezone="UTC",
@@ -45,6 +45,7 @@ TASKS = {
     "export": ("Экспорт состояния в источники", export.export_all),
     "egress_watchdog": ("Исходящий VPS (watchdog)", egress.watchdog),
     "tunnel_watchdog": ("Туннель к VPS (watchdog)", tunnel.watchdog),
+    "geoip_update": ("Базы геолокации DB-IP (раз в месяц)", geoip.update),
 }
 
 
@@ -70,6 +71,7 @@ def _triggers():
         "export": IntervalTrigger(minutes=max(1, settings.get("check_interval_min"))),
         "egress_watchdog": IntervalTrigger(seconds=30),
         "tunnel_watchdog": IntervalTrigger(seconds=30),
+        "geoip_update": IntervalTrigger(hours=12),
     }
 
 
@@ -84,6 +86,7 @@ def setup():
         "export": 120,
         "egress_watchdog": 15,
         "tunnel_watchdog": 20,
+        "geoip_update": 30,
     }
     for name, trig in _triggers().items():
         sched.add_job(_wrap(name, TASKS[name][1]), trig, id=name, next_run_time=now + timedelta(seconds=first[name]))

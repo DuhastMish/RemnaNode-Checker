@@ -54,9 +54,17 @@ def require_status(request: Request):
 
 
 def client_ip(request: Request) -> str:
+    """IP клиента за одним обратным прокси (Caddy / nginx).
+
+    Берём ПОСЛЕДНИЙ адрес X-Forwarded-For — его дописал наш прокси. Первые клиент может прислать сам
+    (nginx с $proxy_add_x_forwarded_for их сохраняет), им верить нельзя. request.client.host не годится:
+    uvicorn с --forwarded-allow-ips '*' подставляет туда как раз первый адрес.
+    """
     xff = request.headers.get("x-forwarded-for")
     if xff:
-        return xff.split(",")[0].strip()
+        last = xff.split(",")[-1].strip()
+        if last:
+            return last
     return request.client.host if request.client else "?"
 
 
