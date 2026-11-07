@@ -161,7 +161,7 @@ def recompute(node_id, online=None, now=None):
 
 def _node_label(node_id):
     rows = db.q(
-        "SELECT s.name AS source, sn.name, sn.external_id FROM source_nodes sn JOIN sources s ON s.id = sn.source_id "
+        "SELECT s.name AS source, sn.name, sn.external_id, sn.country FROM source_nodes sn JOIN sources s ON s.id = sn.source_id "
         "WHERE sn.node_id=? ORDER BY sn.is_primary DESC, sn.id",
         (node_id,),
     )

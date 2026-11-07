@@ -8,7 +8,7 @@
   <a class="alert {{ a.color }}" href="{{ a.href }}">
     {{ pulse(a.color) }}
     <span class="what">
-      <span><b>{{ a.title }}</b>{% if a.sources %} <span class="muted">· {{ a.sources }}</span>{% endif %}</span>
+      <span>{% if a.country %}<span class="flag" title="{{ a.country }}">{{ a.country|flag }}</span>{% endif %}<b>{{ a.title }}</b>{% if a.sources %} <span class="muted">· {{ a.sources }}</span>{% endif %}</span>
       <span class="muted">{% if a.address %}<code>{{ a.address }}</code> · {% endif %}{{ a.text }}</span>
     </span>
     <span class="since" title="{{ a.since|dt }}">{% if a.since %}{{ a.since|duration }}{% endif %}</span>

@@ -25,6 +25,7 @@ def _public(rows):
             "color": r["color"],
             "checked_at": r["checked_at"],
             "flags": r["flags"],
+            "country": r["country"],
             "target_active": r["target_active"],
             "is_active": bool(r["target_active"]),
             "view": r["view"],

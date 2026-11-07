@@ -6,6 +6,11 @@
 <title>{{ title }} · nodecheck</title>
 {% if refresh %}<meta http-equiv="refresh" content="{{ refresh }}">{% endif %}
 <style>
+/* Флаги стран для Windows, где системного эмодзи-флага нет. unicode-range — шрифт качается и применяется
+   только к символам флагов. Twemoji Country Flags, CC-BY 4.0 — app/static/fonts/TwemojiCountryFlags.LICENSE.md */
+@font-face{font-family:"Twemoji Country Flags";font-display:swap;
+  unicode-range:U+1F1E6-1F1FF,U+1F3F4,U+E0062-E0063,U+E0065,U+E0067,U+E006C,U+E006E,U+E0073-E0074,U+E0077,U+E007F;
+  src:url("/static/fonts/TwemojiCountryFlags.woff2") format("woff2")}
 :root{--bg:#0f1115;--card:#181b22;--border:#2a2f3a;--text:#e6e8ee;--muted:#8b93a7;--accent:#4f8cff;
 --green:#2ecc71;--yellow:#f1c40f;--orange:#e67e22;--red:#e74c3c;--grey:#555b6b}
 *{box-sizing:border-box}
@@ -96,6 +101,7 @@ a.ncard:hover{border-color:#3a4150}
 .ncard .foot span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ncard .flags{color:var(--yellow);font-size:12px}.ncard .warn{color:var(--orange);font-size:12px}
 .ncard.grey .name{color:var(--muted)}
+.flag{margin-right:6px;font-family:"Twemoji Country Flags","Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif}
 .bars{display:flex;gap:2px;height:22px}
 .bars i,.legend i{flex:1;border-radius:2px;background:#2a2f3a}
 .bars i.green,.legend i.green{background:var(--green)}.bars i.yellow,.legend i.yellow{background:var(--yellow)}

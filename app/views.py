@@ -48,6 +48,14 @@ def until(ts):
     return f"через {d // 3600} ч"
 
 
+def flag(code):
+    """DE → 🇩🇪: две буквы кода страны → региональные символы Unicode. Пусто/мусор → ''."""
+    code = str(code or "").upper()
+    if len(code) != 2 or not code.isascii() or not code.isalpha():
+        return ""
+    return "".join(chr(0x1F1E6 + ord(ch) - ord("A")) for ch in code)
+
+
 def duration(ts):
     """Сколько прошло с ts: «5 мин», «2 ч 10 мин», «3 дн»."""
     if not ts:
@@ -77,7 +85,7 @@ def human_bytes(n):
     return f"{n:.1f} ТБ"
 
 
-templates.env.filters.update(ago=ago, until=until, dt=dt, hbytes=human_bytes, duration=duration)
+templates.env.filters.update(ago=ago, until=until, dt=dt, hbytes=human_bytes, duration=duration, flag=flag)
 templates.env.globals.update(COLORS=COLORS, COLOR_LABEL=COLOR_LABEL)
 
 
@@ -90,7 +98,7 @@ def render(request, name, **ctx):
 def nodes_with_state(source_id=None):
     """Ноды источников (плитки) с агрегированным состоянием их цели проверки."""
     sql = (
-        "SELECT sn.id AS sn_id, sn.source_id, sn.external_id, sn.name, sn.address, sn.flags, sn.is_active, "
+        "SELECT sn.id AS sn_id, sn.source_id, sn.external_id, sn.name, sn.address, sn.flags, sn.country, sn.is_active, "
         "sn.is_primary, n.id AS node_id, n.address AS target_address, n.fresh_port, n.rev, "
         "COALESCE(ns.color, 'grey') AS color, COALESCE(ns.probe_color, 'grey') AS probe_color, "
         "n.is_active AS target_active, ns.updated_at AS checked_at, ns.up_count, ns.down_count, "
@@ -218,6 +226,7 @@ def active_alerts():
                 "kind": "node",
                 "color": r["color"] or "red",
                 "title": ", ".join(f"{n['name'] or n['external_id']}" for n in names) or r["address"],
+                "country": next((n["country"] for n in names if n.get("country")), ""),
                 "sources": ", ".join(dict.fromkeys(n["source"] for n in names)),
                 "address": r["address"],
                 "text": f"не видят {down} из {up + down} чекеров" if up + down else "нет свежих данных",
@@ -232,6 +241,7 @@ def active_alerts():
                     "kind": "checker",
                     "color": "red",
                     "title": f"Чекер «{c['name']}»",
+                    "country": "",
                     "sources": "",
                     "address": c["public_ip"] or "",
                     "text": "нет heartbeat" if c["last_seen_at"] else "ещё не подключался",

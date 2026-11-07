@@ -45,10 +45,10 @@
 {% macro node_card(r, href=None, admin=False) %}
 {% set dot = r.color if r.target_active else 'grey' %}
 <{{ 'a' if href else 'div' }} class="ncard {{ dot }}"{% if href %} href="{{ href }}"{% endif %}
-  data-f="{{ r.view }}" data-q="{{ (r.name ~ ' ' ~ r.address)|lower }}">
+  data-f="{{ r.view }}" data-q="{{ (r.name ~ ' ' ~ r.address ~ ' ' ~ (r.country or ''))|lower }}">
   <div class="top">
     {{ pulse(dot) }}
-    <span class="name">{{ r.name or '—' }}</span>
+    <span class="name">{% if r.country %}<span class="flag" title="{{ r.country }}">{{ r.country|flag }}</span>{% endif %}{{ r.name or '—' }}</span>
     {% if admin and r.linked_count > 1 %}<span class="badge" title="связана с нодами других источников">×{{ r.linked_count }}</span>{% endif %}
     <span class="meta">
       {% if r.latency is not none %}<span class="lat">{{ r.latency }} мс</span>{% endif %}

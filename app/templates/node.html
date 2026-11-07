@@ -26,7 +26,7 @@
     {% for sn in linked %}
     <tr>
       <td>{{ sn.source_name }}{% if sn.is_primary %} <span class="badge">основная</span>{% endif %}</td>
-      <td>{{ sn.name or '—' }}</td>
+      <td>{% if sn.country %}<span class="flag" title="{{ sn.country }}">{{ sn.country|flag }}</span>{% endif %}{{ sn.name or '—' }}</td>
       <td><code>{{ sn.address }}</code>{% if sn.address != node.address %} <span class="bad">≠</span>{% endif %}</td>
       <td>{{ sn.fresh_port or '—' }}</td>
       <td class="muted">{{ sn.flags or '—' }}{% if not sn.is_active %} · неактивна{% endif %}</td>

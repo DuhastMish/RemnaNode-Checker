@@ -16,7 +16,7 @@
   {% for r in down %}
   <div class="alert {{ r.color }}">
     {{ pulse(r.color) }}
-    <span class="what"><span><b>{{ r.name }}</b></span><span class="muted"><code>{{ r.address }}</code> · {{ COLOR_LABEL[r.color] }}</span></span>
+    <span class="what"><span>{% if r.country %}<span class="flag" title="{{ r.country }}">{{ r.country|flag }}</span>{% endif %}<b>{{ r.name }}</b></span><span class="muted"><code>{{ r.address }}</code> · {{ COLOR_LABEL[r.color] }}</span></span>
     <span class="since">{% if r.incident_since %}{{ r.incident_since|duration }}{% endif %}</span>
   </div>
   {% else %}

@@ -26,7 +26,13 @@ def _get_json(url, token, timeout=15):
         return json.load(resp)
 
 
-# ---------- адаптеры типов: всё приводится к {external_id, name, address, flags, fresh_port, is_active} ----------
+# ---------- адаптеры типов: всё приводится к {external_id, name, address, flags, country, fresh_port, is_active} ----------
+
+
+def _country(code):
+    """Двухбуквенный код страны или ''. Remnawave шлёт XX, если страна не задана."""
+    code = str(code or "").strip().upper()
+    return code if len(code) == 2 and code.isascii() and code.isalpha() and code != "XX" else ""
 
 
 def _remnawave_item(n):
@@ -40,6 +46,7 @@ def _remnawave_item(n):
         "name": n.get("name") or "",
         "address": (n.get("address") or "").strip(),
         "flags": ", ".join(flags),
+        "country": _country(n.get("countryCode")),
         "fresh_port": None,
         "is_active": 0 if n.get("isDisabled") else 1,
     }
@@ -61,6 +68,7 @@ def _open60_item(n):
         "name": f"#{n.get('id')} {n.get('country', '')} {n.get('city') or ''}".strip(),
         "address": (n.get("ip_address") or "").strip(),
         "flags": ", ".join(flags),
+        "country": "",
         "fresh_port": n.get("fresh_port"),
         "is_active": 1 if active else 0,
     }
@@ -109,21 +117,31 @@ def _upsert(source_id, item, now):
     )
     if row:
         db.x(
-            "UPDATE source_nodes SET name=?, address=?, flags=?, fresh_port=?, is_active=?, last_seen_at=? "
+            "UPDATE source_nodes SET name=?, address=?, flags=?, country=?, fresh_port=?, is_active=?, last_seen_at=? "
             "WHERE id=?",
-            (item["name"], item["address"], item["flags"], item["fresh_port"], item["is_active"], now, row["id"]),
+            (
+                item["name"],
+                item["address"],
+                item["flags"],
+                item.get("country", ""),
+                item["fresh_port"],
+                item["is_active"],
+                now,
+                row["id"],
+            ),
         )
         return row["node_id"]
     node_id = nodes.create_target(now)
     db.x(
-        "INSERT INTO source_nodes(source_id, external_id, name, address, flags, fresh_port, is_active, "
-        "node_id, is_primary, last_seen_at) VALUES(?,?,?,?,?,?,?,?,1,?)",
+        "INSERT INTO source_nodes(source_id, external_id, name, address, flags, country, fresh_port, is_active, "
+        "node_id, is_primary, last_seen_at) VALUES(?,?,?,?,?,?,?,?,?,1,?)",
         (
             source_id,
             item["external_id"],
             item["name"],
             item["address"],
             item["flags"],
+            item.get("country", ""),
             item["fresh_port"],
             item["is_active"],
             node_id,

@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS source_nodes (
     name          TEXT DEFAULT '',
     address       TEXT DEFAULT '',
     flags         TEXT DEFAULT '',
+    country       TEXT DEFAULT '',            -- ISO 3166-1 alpha-2 (DE) — флаг; Remnawave: countryCode
     fresh_port    INTEGER,
     is_active     INTEGER DEFAULT 1,
     node_id       TEXT NOT NULL,              -- цель проверки
@@ -198,6 +199,9 @@ def init():
     cols = {r[1] for r in c.execute("PRAGMA table_info(node_state)")}
     if "probe_color" not in cols:
         c.execute("ALTER TABLE node_state ADD COLUMN probe_color TEXT")
+    cols = {r[1] for r in c.execute("PRAGMA table_info(source_nodes)")}
+    if "country" not in cols:
+        c.execute("ALTER TABLE source_nodes ADD COLUMN country TEXT DEFAULT ''")
     cols = {r[1] for r in c.execute("PRAGMA table_info(node_checker_state)")}
     if "seen_alive" not in cols:
         c.execute("ALTER TABLE node_checker_state ADD COLUMN seen_alive INTEGER NOT NULL DEFAULT 0")
