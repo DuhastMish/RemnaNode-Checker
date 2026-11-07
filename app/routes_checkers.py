@@ -16,8 +16,7 @@ def _panel_arg(request: Request):
     Возвращает (аргумент, предупреждение | None). Домен без схемы чекер понимает как https://домен.
     """
     if config.ADMIN_HOST:
-        port = "" if config.HTTPS_PORT == "443" else f":{config.HTTPS_PORT}"
-        return config.ADMIN_HOST + port, None
+        return config.ADMIN_HOST, None
     url = request.base_url
     if url.scheme == "https":
         return url.netloc, "ADMIN_HOST в .env не задан — домен взят из адреса, по которому открыта панель."
