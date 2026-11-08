@@ -2,6 +2,16 @@
 {% from "_nodes.html" import pulse, stats_block, toolbar, node_card, filter_script %}
 {% block content %}
 
+<div class="tabs">
+  {% for t in tabs %}
+  <a href="/?source={{ t.key }}" class="{{ 'active' if source and t.key == source.id }}">
+    {{ t.label }}
+    <span class="muted">{{ t.counts.total }}</span>
+    {% if t.counts.orange or t.counts.red %}<span class="dot red"></span>{{ t.counts.orange + t.counts.red }}{% endif %}
+  </a>
+  {% endfor %}
+</div>
+
 <section class="card alerts">
   {% set problems = alerts|rejectattr('positive')|list %}
   {% set good = alerts|selectattr('positive')|list %}
@@ -16,22 +26,15 @@
     {{ pulse(a.color) }}
     <span class="what">
       <span>{% if a.country %}<span class="flag" title="{{ a.country }}">{{ a.country|flag }}</span>{% endif %}<b>{{ a.title }}</b>{% if a.sources %} <span class="muted">· {{ a.sources }}</span>{% endif %}</span>
-      <span class="muted">{% if a.address %}<code>{{ a.address }}</code> · {% endif %}{{ a.text }}</span>
+      <span class="muted">{% if a.address %}<code>{{ a.address }}</code> · {% endif %}{{ a.lines[0] }}</span>
+      {%- for line in a.lines[1:] %}
+      <span class="muted">{{ line }}</span>
+      {%- endfor %}
     </span>
     <span class="since" title="{{ a.since|dt }}">{% if a.since %}{{ a.since|duration }}{% endif %}</span>
   </a>
   {% endfor %}
 </section>
-
-<div class="tabs">
-  {% for t in tabs %}
-  <a href="/?source={{ t.key }}" class="{{ 'active' if source and t.key == source.id }}">
-    {{ t.label }}
-    <span class="muted">{{ t.counts.total }}</span>
-    {% if t.counts.orange or t.counts.red %}<span class="dot red"></span>{{ t.counts.orange + t.counts.red }}{% endif %}
-  </a>
-  {% endfor %}
-</div>
 
 {% if not source %}
 <p class="muted">Источников пока нет. Добавь панель Remnawave или Open60 на странице <a href="/sources">Источники</a>.</p>

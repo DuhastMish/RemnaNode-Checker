@@ -53,10 +53,18 @@ Remnawave / Open60 ──sync──▶ Панель (UI, агрегация, а�
 
 {"type": "checker", "event": "offline | online", "text": "[CHECKER OFFLINE] Дом пропал: …",
  "checker_id": "uuid", "name": "Дом", "last_seen_at": 1762500000, "ts": 1762500090}
+
+{"type": "traffic", "event": "throughput_drop | throughput_restored",
+ "text": "[THROUGHPUT DROP] DE-1 (Main) 1.2.3.4: трафик 204.5 → 22.9 Мбит/с (−89%)",
+ "node_id": "uuid", "source": "Main", "name": "DE-1", "external_id": "uuid-в-источнике", "country": "DE",
+ "address": "1.2.3.4", "rate_mbps": 22.9, "baseline_mbps": 204.5, "users_online": 107,
+ "drop_started_at": 1762499000, "ts": 1762500000}
 ```
 
 `down` — открыт инцидент (нода стала оранжевой или красной), `changed` — оранжевый ↔ красный,
 `up` — инцидент закрыт; если адрес за время инцидента сменился, это указано в `text`.
+`throughput_drop` — обрыв трафика ноды Remnawave (замедление ТСПУ / fair-use хостера), `throughput_restored` —
+скорость вернулась (≥ 70% от прежней).
 
 ## Экспорт
 

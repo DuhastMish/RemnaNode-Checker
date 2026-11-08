@@ -225,47 +225,86 @@ def checker_stats():
     return {"online": sum(1 for c in rows if c["is_online"]), "total": len(rows)}
 
 
-def active_alerts():
-    """Блок на главной (по всем источникам): проблемы — открытые инциденты активных нод и пропавшие чекеры;
-    хорошие новости (positive) — неактивные ноды, которые все чекеры видят рабочими N проверок подряд."""
-    out = []
+SEVERITY = {"red": 3, "orange": 2, "grey": 1, "green": 0}
+
+
+def _node_names(node_id, source_id):
+    """(заголовок, флаг, другие источники) ноды: имена — из выбранного источника, если он задан."""
+    names = state._node_label(node_id)
+    here = [n for n in names if source_id is None or n["source_id"] == source_id] or names
+    title = ", ".join(dict.fromkeys(n["name"] or n["external_id"] for n in here))
+    country = next((n["country"] for n in here if n.get("country")), "")
+    others = [n["source"] for n in names if source_id is not None and n["source_id"] != source_id]
+    sources = ", ".join(dict.fromkeys(others if source_id is not None else [n["source"] for n in names]))
+    return title, country, ("также: " + sources if source_id is not None and sources else sources)
+
+
+def active_alerts(source_id=None):
+    """Блок «Активные оповещения» на главной.
+
+    Проблемы — открытые инциденты и обрывы трафика активных нод, пропавшие чекеры; хорошие новости
+    (positive) — неактивные ноды, которые все чекеры видят рабочими N проверок подряд.
+    source_id — вкладка: ноды только этого источника; чекеры общие и показываются на всех вкладках.
+    Одна запись на ноду: инцидент и обрывы трафика сводятся в неё строками (lines), цвет — худший,
+    since — самое раннее начало.
+    """
+    in_source = ""
+    if source_id is not None:
+        in_source = " AND EXISTS (SELECT 1 FROM source_nodes x WHERE x.node_id = n.id AND x.source_id = ?)"
+    args = () if source_id is None else (source_id,)
+    by_node: dict = {}
+
+    def node_alert(node_id, address, color, line, since):
+        a = by_node.get(node_id)
+        if not a:
+            title, country, sources = _node_names(node_id, source_id)
+            a = by_node[node_id] = {
+                "kind": "node",
+                "color": color,
+                "title": title or address,
+                "country": country,
+                "sources": sources,
+                "address": address,
+                "lines": [],
+                "since": since,
+                "href": f"/node/{node_id}",
+            }
+        if SEVERITY.get(color, 0) > SEVERITY.get(a["color"], 0):
+            a["color"] = color
+        if since and (not a["since"] or since < a["since"]):
+            a["since"] = since
+        a["lines"].append(line)
+
     for r in db.q(
         "SELECT i.id AS incident_id, i.opened_at, n.id AS node_id, n.address, ns.color, ns.up_count, ns.down_count "
         "FROM incidents i JOIN nodes n ON n.id = i.node_id LEFT JOIN node_state ns ON ns.node_id = n.id "
-        "WHERE i.closed_at IS NULL AND n.is_active = 1 ORDER BY i.opened_at DESC"
+        "WHERE i.closed_at IS NULL AND n.is_active = 1" + in_source + " ORDER BY i.opened_at DESC",
+        args,
     ):
-        names = state._node_label(r["node_id"])
         up, down = r["up_count"] or 0, r["down_count"] or 0
-        out.append(
-            {
-                "kind": "node",
-                "color": r["color"] or "red",
-                "title": ", ".join(f"{n['name'] or n['external_id']}" for n in names) or r["address"],
-                "country": next((n["country"] for n in names if n.get("country")), ""),
-                "sources": ", ".join(dict.fromkeys(n["source"] for n in names)),
-                "address": r["address"],
-                "text": f"не видят {down} из {up + down} чекеров" if up + down else "нет свежих данных",
-                "since": r["opened_at"],
-                "href": f"/node/{r['node_id']}",
-            }
+        text = f"не видят {down} из {up + down} чекеров" if up + down else "нет свежих данных"
+        node_alert(r["node_id"], r["address"], r["color"] or "red", text, r["opened_at"])
+    drops = [d for d in traffic.open_drops() if source_id is None or d["source_id"] == source_id]
+    multi = {
+        r["node_id"]
+        for r in db.q(
+            "SELECT node_id FROM source_nodes"
+            + ("" if source_id is None else " WHERE source_id = ?")
+            + " GROUP BY node_id HAVING COUNT(*) > 1",
+            args,
         )
-    for d in traffic.open_drops():
+    }
+    for d in drops:
         rate, base = traffic.mbps(d["rate_bps"]), traffic.mbps(d["drop_base_bps"])
         drop = round(100 - 100 * (d["rate_bps"] or 0) / d["drop_base_bps"]) if d["drop_base_bps"] else 0
         users = f" · онлайн {d['users_online']}" if d["users_online"] is not None else ""
-        out.append(
-            {
-                "kind": "traffic",
-                "color": "orange",
-                "title": d["name"] or d["external_id"],
-                "country": d["country"],
-                "sources": d["source"],
-                "address": d["address"],
-                "text": f"обрыв трафика: {base} → {rate} Мбит/с (−{drop}%){users}",
-                "since": d["drop_at"],
-                "href": f"/node/{d['node_id']}",
-            }
-        )
+        text = f"обрыв трафика: {base} → {rate} Мбит/с (−{drop}%){users}"
+        # у цели несколько нод в этом источнике — уточняем, у какой обрыв
+        if d["node_id"] in multi:
+            text = f"{d['name'] or d['external_id']}: {text}"
+        node_alert(d["node_id"], d["address"], "orange", text, d["drop_at"])
+    out = sorted(by_node.values(), key=lambda a: (-SEVERITY.get(a["color"], 0), -(a["since"] or 0)))
+
     for c in checkers.all_checkers():
         if c["enabled"] and not c["is_online"]:
             out.append(
@@ -276,7 +315,7 @@ def active_alerts():
                     "country": "",
                     "sources": "",
                     "address": c["public_ip"] or "",
-                    "text": checkers.offline_reason(c),
+                    "lines": [checkers.offline_reason(c)],
                     "since": c["last_seen_at"],
                     "href": "/checkers",
                 }
@@ -286,21 +325,25 @@ def active_alerts():
         for r in db.q(
             "SELECT n.id AS node_id, n.address, ns.ok_streak, ns.ok_since, ns.up_count FROM nodes n "
             "JOIN node_state ns ON ns.node_id = n.id "
-            "WHERE n.is_active = 0 AND ns.probe_color = 'green' AND ns.ok_streak >= ? ORDER BY ns.ok_since",
-            (need,),
+            "WHERE n.is_active = 0 AND ns.probe_color = 'green' AND ns.ok_streak >= ?"
+            + in_source
+            + " ORDER BY ns.ok_since",
+            (need, *args),
         ):
-            names = state._node_label(r["node_id"])
+            title, country, sources = _node_names(r["node_id"], source_id)
             out.append(
                 {
                     "kind": "revive",
                     "positive": True,
                     "color": "green",
-                    "title": ", ".join(f"{n['name'] or n['external_id']}" for n in names) or r["address"],
-                    "country": next((n["country"] for n in names if n.get("country")), ""),
-                    "sources": ", ".join(dict.fromkeys(n["source"] for n in names)),
+                    "title": title or r["address"],
+                    "country": country,
+                    "sources": sources,
                     "address": r["address"],
-                    "text": f"выключена в источнике, но все чекеры ({r['up_count']}) видят её рабочей "
-                    f"{r['ok_streak']} проверок подряд — можно вернуть в работу",
+                    "lines": [
+                        f"выключена в источнике, но все чекеры ({r['up_count']}) видят её рабочей "
+                        f"{r['ok_streak']} проверок подряд — можно вернуть в работу"
+                    ],
                     "since": r["ok_since"],
                     "href": f"/node/{r['node_id']}",
                 }

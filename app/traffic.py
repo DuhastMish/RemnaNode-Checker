@@ -210,7 +210,7 @@ def open_drops():
     return [
         dict(r)
         for r in db.q(
-            "SELECT t.*, sn.node_id, sn.name, sn.external_id, sn.address, sn.country, s.name AS source "
+            "SELECT t.*, sn.node_id, sn.source_id, sn.name, sn.external_id, sn.address, sn.country, s.name AS source "
             "FROM traffic_state t JOIN source_nodes sn ON sn.id = t.sn_id JOIN sources s ON s.id = sn.source_id "
             "WHERE t.drop_at IS NOT NULL AND sn.is_active = 1 ORDER BY t.drop_at DESC"
         )

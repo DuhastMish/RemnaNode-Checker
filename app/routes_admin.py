@@ -58,7 +58,7 @@ def index(request: Request):
         rows=rows,
         stats=views.stats(rows),
         checkers=views.checker_stats(),
-        alerts=views.active_alerts(),
+        alerts=views.active_alerts(source_id),
         tabs=tabs,
         title="Ноды",
     )
