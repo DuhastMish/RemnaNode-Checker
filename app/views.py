@@ -242,7 +242,8 @@ def _node_names(node_id, source_id):
 def active_alerts(source_id=None):
     """Блок «Активные оповещения» на главной.
 
-    Проблемы — открытые инциденты и обрывы трафика активных нод, пропавшие чекеры; хорошие новости
+    Проблемы — открытые инциденты и обрывы трафика активных нод; чекеры — одной записью и только если
+    на связи нет ни одного (пропажа части видна в счётчике чекеров и в алертах вебхука); хорошие новости
     (positive) — неактивные ноды, которые все чекеры видят рабочими N проверок подряд.
     source_id — вкладка: ноды только этого источника; чекеры общие и показываются на всех вкладках.
     Одна запись на ноду: инцидент и обрывы трафика сводятся в неё строками (lines), цвет — худший,
@@ -305,21 +306,23 @@ def active_alerts(source_id=None):
         node_alert(d["node_id"], d["address"], "orange", text, d["drop_at"])
     out = sorted(by_node.values(), key=lambda a: (-SEVERITY.get(a["color"], 0), -(a["since"] or 0)))
 
-    for c in checkers.all_checkers():
-        if c["enabled"] and not c["is_online"]:
-            out.append(
-                {
-                    "kind": "checker",
-                    "color": "red",
-                    "title": f"Чекер «{c['name']}»",
-                    "country": "",
-                    "sources": "",
-                    "address": c["public_ip"] or "",
-                    "lines": [checkers.offline_reason(c)],
-                    "since": c["last_seen_at"],
-                    "href": "/checkers",
-                }
-            )
+    # чекеры: только если на связи не осталось ни одного включённого — тогда ноды не проверяются вовсе
+    enabled = [c for c in checkers.all_checkers() if c["enabled"]]
+    if enabled and not any(c["is_online"] for c in enabled):
+        seen = [c["last_seen_at"] for c in enabled if c["last_seen_at"]]
+        out.append(
+            {
+                "kind": "checker",
+                "color": "red",
+                "title": "Нет ни одного чекера на связи",
+                "country": "",
+                "sources": "",
+                "address": "",
+                "lines": ["ноды не проверяются"] + [f"«{c['name']}»: {checkers.offline_reason(c)}" for c in enabled],
+                "since": max(seen) if seen else None,
+                "href": "/checkers",
+            }
+        )
     need = settings.get("revive_ok_streak")
     if need > 0:
         for r in db.q(

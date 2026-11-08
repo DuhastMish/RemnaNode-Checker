@@ -19,7 +19,7 @@
     {%- if problems %} <span class="count">{{ problems|length }}</span>{% endif %}
     {%- if good %} <span class="count good" title="можно вернуть в работу">{{ good|length }}</span>{% endif %}</h2>
   {% if not problems %}
-  <div class="allok">{{ pulse('green') }} Всё работает — открытых инцидентов нет, все чекеры на связи</div>
+  <div class="allok">{{ pulse('green') }} Всё работает — открытых инцидентов нет</div>
   {% endif %}
   {% for a in problems + good %}
   <a class="alert {{ a.color }}" href="{{ a.href }}">
