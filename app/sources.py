@@ -251,24 +251,48 @@ def get(source_id):
 
 def save(source_id, data):
     """Создать (source_id=None) или обновить источник. Пустой токен при обновлении — не менять."""
-    fields = ("type", "name", "url", "token", "export_url", "export_token")
+    fields = (
+        "type",
+        "name",
+        "url",
+        "token",
+        "export_url",
+        "export_token",
+        "alert_url",
+        "alert_token",
+        "tg_token",
+        "tg_chat",
+    )
     if source_id is None:
         return db.x(
-            "INSERT INTO sources(type, name, url, token, export_url, export_token, created_at) "
-            "VALUES(?,?,?,?,?,?,?)",
+            f"INSERT INTO sources({', '.join(fields)}, created_at) VALUES({','.join('?' * len(fields))},?)",
             (*[data.get(f, "") for f in fields], int(time.time())),
         )
     cur = get(source_id)
     if not cur:
         return None
     upd = {f: data.get(f, cur[f]) for f in fields}
-    for secret in ("token", "export_token"):
+    for secret in ("token", "export_token", "alert_token", "tg_token"):
         if not data.get(secret):
             upd[secret] = cur[secret]
     upd["type"] = cur["type"]  # тип не меняется: external_id разных типов несовместимы
     db.x(
-        "UPDATE sources SET name=?, url=?, token=?, export_url=?, export_token=? WHERE id=?",
-        (upd["name"], upd["url"], upd["token"], upd["export_url"], upd["export_token"], source_id),
+        "UPDATE sources SET name=?, url=?, token=?, export_url=?, export_token=?, alert_url=?, alert_token=?, "
+        "tg_token=?, tg_chat=?, tg_chat_id=? WHERE id=?",
+        (
+            upd["name"],
+            upd["url"],
+            upd["token"],
+            upd["export_url"],
+            upd["export_token"],
+            upd["alert_url"],
+            upd["alert_token"],
+            upd["tg_token"],
+            upd["tg_chat"],
+            # сменили бота или адресата — найденный chat_id больше не годится
+            cur["tg_chat_id"] if (upd["tg_token"], upd["tg_chat"]) == (cur["tg_token"], cur["tg_chat"]) else "",
+            source_id,
+        ),
     )
     return source_id
 

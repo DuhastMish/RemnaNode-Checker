@@ -81,7 +81,6 @@
     {% endfor %}
     <div class="actions">
       <button type="submit">Сохранить</button>
-      {% if sid == 'alerts' %}<button type="submit" class="secondary" formaction="/settings/alerts/test">Отправить тестовый</button>{% endif %}
       {% if sid == 'egress' %}<button type="submit" class="secondary" formaction="/settings/egress/test">Проверить (показать внешний IP)</button>{% endif %}
       {% if sid == 'tunnel' %}
         <button type="submit" formaction="/settings/tunnel/provision" onclick="return confirm('Зайти на VPS по SSH, поставить WireGuard и поднять туннель?')">Настроить VPS автоматически</button>
@@ -100,23 +99,6 @@
     <h2>Блок для /etc/wireguard/wg0.conf на VPS (только для ручного способа)</h2>
     <pre>{{ peer_block }}</pre>
     <p class="muted">Вставь на VPS, затем <code>wg syncconf wg0 &lt;(wg-quick strip wg0)</code> или <code>systemctl restart wg-quick@wg0</code>. После этого — «Применить» здесь.</p>
-  {% endif %}
-
-  {% if sid == 'alerts' %}
-    <p class="muted">Алерты уходят только в момент перехода: открытие и закрытие инцидента по ноде (оранжевый/красный
-      и обратно в зелёный), смена оранжевый ↔ красный, чекер пропал или вернулся, обрыв трафика ноды Remnawave и
-      его восстановление. Уже открытые инциденты повторно не отправляются; серый (нет данных) алертов не вызывает.
-      Журнал ниже хранится в памяти и очищается при перезапуске панели.
-      Формат: <code>POST {"type":"node"|"checker"|"traffic"|"test","event",…,"text"}</code>.</p>
-    <h2 style="margin-top:20px">Последние отправки</h2>
-    <table>
-      <tr><th>Когда</th><th>Текст</th><th>Результат</th></tr>
-      {% for e in alert_log %}
-      <tr><td>{{ e.ts|dt }}</td><td>{{ e.label }}</td><td class="{{ 'ok' if e.ok else 'bad' }}">{{ e.status }}</td></tr>
-      {% else %}
-      <tr><td colspan="3" class="muted">Ещё не отправлялось</td></tr>
-      {% endfor %}
-    </table>
   {% endif %}
 
   {% if sid == 'scheduler' %}

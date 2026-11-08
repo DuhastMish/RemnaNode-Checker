@@ -182,24 +182,23 @@ def _alert(sn_id, event, rate, base, users, drop_at, now):
     else:
         mins = max(1, (now - drop_at) // 60)
         text = f"[THROUGHPUT RESTORED] {title}: трафик снова {r} Мбит/с (было {b}), падение длилось {mins} мин"
-    alerts.send_alert(
-        {
-            "type": "traffic",
-            "event": event,
-            "text": text,
-            "node_id": sn["node_id"],
-            "source": sn["source"],
-            "name": sn["name"],
-            "external_id": sn["external_id"],
-            "country": sn["country"],
-            "address": sn["address"],
-            "rate_mbps": r,
-            "baseline_mbps": b,
-            "users_online": users,
-            "drop_started_at": drop_at,
-            "ts": now,
-        }
-    )
+    payload = {
+        "type": "traffic",
+        "event": event,
+        "text": text,
+        "node_id": sn["node_id"],
+        "name": sn["name"],
+        "external_id": sn["external_id"],
+        "country": sn["country"],
+        "address": sn["address"],
+        "rate_mbps": r,
+        "baseline_mbps": b,
+        "users_online": users,
+        "drop_started_at": drop_at,
+        "ts": now,
+    }
+    for route in alerts.source_routes([sn["source_id"]]):
+        alerts.send_routed(route, payload)
 
 
 # ---------- для страниц ----------

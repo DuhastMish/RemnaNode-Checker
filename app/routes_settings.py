@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import alerts, auth, egress, scheduler, settings, tunnel, views
+from . import auth, egress, scheduler, settings, tunnel, views
 
 router = APIRouter()
 
@@ -37,7 +37,6 @@ def settings_page(request: Request):
         egress_error=egress.last_error,
         last_sync=scheduler.last_sync,
         history=settings.history(15),
-        alert_log=[e for e in alerts.log if e["kind"] == "alert"],
     )
 
 
@@ -134,19 +133,6 @@ def tunnel_genkey(request: Request):
     auth.require_admin(request)
     tunnel.regen_keys()
     return _back("tunnel", "Ключи перегенерированы. Обнови [Peer] на VPS и нажми «Применить»")
-
-
-@router.post("/settings/alerts/test")
-async def alerts_test(request: Request):
-    """Тестовая отправка: URL и токен из формы (можно до сохранения), пустые — из сохранённых настроек."""
-    auth.require_admin(request)
-    form = await request.form()
-    url = (form.get("alert_webhook_url") or "").strip() or settings.get("alert_webhook_url")
-    token = (form.get("alert_webhook_token") or "").strip() or settings.get("alert_webhook_token")
-    if not url:
-        return _back("alerts", "Вебхук: укажи URL")
-    e = alerts.send_test(url, token)
-    return _back("alerts", f"Тестовый вебхук: {'доставлен' if e['ok'] else 'не доставлен'} — {e['status']}")
 
 
 @router.post("/settings/egress/test")

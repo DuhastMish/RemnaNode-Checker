@@ -7,14 +7,25 @@
   {% if s.export_url %}<p class="muted">Экспорт: {% if s.last_export %}{{ s.last_export.ts|ago }} —
     <span class="{{ 'ok' if s.last_export.ok else 'bad' }}">{{ s.last_export.status }}</span>{% else %}ещё не отправлялся
     (раз в интервал плановой проверки){% endif %}</p>{% endif %}
+  <p class="muted">Алерты: {% if not s.alert_url %}вебхук не задан{% elif s.last_alert %}последний
+    {{ s.last_alert.ts|ago }} — <span class="{{ 'ok' if s.last_alert.ok else 'bad' }}">{{ s.last_alert.status }}</span>{% else %}включены,
+    ещё не отправлялись{% endif %}{% if s.tg_token and s.tg_chat %} · Telegram {{ s.tg_chat }}{% if s.tg_chat_id %}
+    <span class="muted">(chat {{ s.tg_chat_id }})</span>{% endif %}{% if s.last_tg %}: {{ s.last_tg.ts|ago }} —
+    <span class="{{ 'ok' if s.last_tg.ok else 'bad' }}">{{ s.last_tg.status }}</span>{% endif %}{% endif %}</p>
   <form method="post" action="/sources/{{ s.id }}">
     <div class="row"><label>Имя вкладки</label><input name="name" value="{{ s.name }}" required></div>
     <div class="row"><label>URL панели</label><input name="url" value="{{ s.url }}" required></div>
     <div class="row"><label>Токен API</label><input type="password" name="token" placeholder="••••••••  (пусто — не менять)" autocomplete="new-password"></div>
     <div class="row"><label>Экспорт: URL приёма<small>POST JSON с состоянием нод этого источника</small></label><input name="export_url" value="{{ s.export_url }}"></div>
     <div class="row"><label>Экспорт: токен<small>Authorization: Bearer</small></label><input type="password" name="export_token" placeholder="••••••••  (пусто — не менять)" autocomplete="new-password"></div>
+    <div class="row"><label>Алерты: URL вебхука<small>инциденты и обрывы трафика нод этого источника, пропажа чекеров; пусто — не слать</small></label><input name="alert_url" value="{{ s.alert_url }}"></div>
+    <div class="row"><label>Алерты: токен<small>Authorization: Bearer; необязательно</small></label><input type="password" name="alert_token" placeholder="••••••••  (пусто — не менять)" autocomplete="new-password"></div>
+    <div class="row"><label>Telegram: токен бота<small>от @BotFather</small></label><input type="password" name="tg_token" placeholder="{{ '••••••••  (пусто — не менять)' if s.tg_token else '123456:ABC…' }}" autocomplete="new-password"></div>
+    <div class="row"><label>Telegram: кому<small>@username (сначала напиши боту /start), @канал (бот — админ) или chat_id; пусто — не слать</small></label><input name="tg_chat" value="{{ s.tg_chat }}" placeholder="@username"></div>
     <div class="actions">
       <button type="submit">Сохранить</button>
+      <button type="submit" class="secondary" formaction="/sources/{{ s.id }}/alerts/test">Тест вебхука</button>
+      <button type="submit" class="secondary" formaction="/sources/{{ s.id }}/telegram/test">Тест Telegram</button>
       <button type="submit" class="secondary" formaction="/sources/{{ s.id }}/test">Проверить подключение</button>
       <button type="submit" class="secondary" formaction="/sources/{{ s.id }}/sync">Синхронизировать все</button>
       <a class="btn secondary" href="/?source={{ s.id }}">Открыть вкладку</a>
@@ -34,7 +45,37 @@
     <div class="row"><label>Токен API<small>Remnawave: API-токен; Open60: ADMIN_TOKEN</small></label><input type="password" name="token" required autocomplete="new-password"></div>
     <div class="row"><label>Экспорт: URL приёма<small>необязательно</small></label><input name="export_url"></div>
     <div class="row"><label>Экспорт: токен</label><input type="password" name="export_token" autocomplete="new-password"></div>
+    <div class="row"><label>Алерты: URL вебхука<small>необязательно; пусто — алерты этого источника не отправляются</small></label><input name="alert_url"></div>
+    <div class="row"><label>Алерты: токен</label><input type="password" name="alert_token" autocomplete="new-password"></div>
+    <div class="row"><label>Telegram: токен бота<small>необязательно</small></label><input type="password" name="tg_token" autocomplete="new-password"></div>
+    <div class="row"><label>Telegram: кому<small>@username, @канал или chat_id</small></label><input name="tg_chat" placeholder="@username"></div>
     <div class="actions"><button type="submit">Добавить и синхронизировать</button></div>
   </form>
+</div>
+
+<div class="card" id="alerts">
+  <h2>Алерты</h2>
+  <p class="muted">Каналы задаются у каждого источника: вебхук (POST JSON) и/или Telegram (тот же текст сообщением);
+    ничего не задано — алерты этого источника не отправляются. По нодам алерт уходит в каналы источника, где есть
+    нода (у связанной ноды — в каждый её источник, в тексте только имена из этого источника); пропажа и возврат
+    чекеров — во все каналы. Один и тот же адресат у нескольких источников получает одно сообщение.</p>
+  <p class="muted">Telegram: бот не может написать человеку первым — пусть он напишет боту <code>/start</code>, затем
+    «Тест Telegram» найдёт его chat_id (по сообщениям за последние сутки) и запомнит. Для канала добавь бота
+    администратором. Если у бота настроен свой вебхук, найти chat_id не получится — укажи chat_id числом.
+    Из РФ api.telegram.org может быть недоступен — тогда нужен «Исходящий VPS» в настройках.</p>
+  <p class="muted">Алерты уходят только в момент перехода: открытие и закрытие инцидента по ноде (оранжевый/красный
+    и обратно в зелёный), смена оранжевый ↔ красный, чекер пропал или вернулся, обрыв трафика ноды Remnawave и
+    его восстановление. Уже открытые инциденты повторно не отправляются; серый (нет данных) алертов не вызывает.
+    Формат: <code>POST {"type":"node"|"checker"|"traffic"|"test","event",…,"text","source","source_ids"}</code>.
+    Журнал хранится в памяти и очищается при перезапуске панели.</p>
+  <h2 style="margin-top:20px">Последние отправки</h2>
+  <table>
+    <tr><th>Когда</th><th>Источник</th><th>Канал</th><th>Текст</th><th>Результат</th></tr>
+    {% for e in alert_log %}
+    <tr><td>{{ e.ts|dt }}</td><td>{{ e.source or '—' }}</td><td>{{ 'Telegram' if e.channel == 'telegram' else 'вебхук' }}</td><td>{{ e.label }}</td><td class="{{ 'ok' if e.ok else 'bad' }}">{{ e.status }}</td></tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">Ещё не отправлялось</td></tr>
+    {% endfor %}
+  </table>
 </div>
 {% endblock %}

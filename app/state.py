@@ -220,33 +220,43 @@ def _incident_step(node_id, old, color, up, down):
 
 
 def _alert_node(event, node_id, incident_id, color, prev, address, address_at_open, up, down, duration=None):
+    """Алерт по ноде — в вебхуки её источников. В текст и payload попадают только имена нод тех источников,
+    в чей вебхук он уходит (чужие источники связанной ноды не светятся)."""
     names = _node_label(node_id)
-    title = ", ".join(f"{n['name'] or n['external_id']} ({n['source']})" for n in names) or node_id
-    if event == "down":
-        text = f"[DOWN] {title} {address}: {COLOR_TEXT[color]} (видят {up} из {up + down})"
-    elif event == "changed":
-        text = f"[CHANGED] {title} {address}: {COLOR_TEXT.get(prev, prev)} → {COLOR_TEXT[color]} (видят {up} из {up + down})"
-    else:
-        text = f"[UP] {title} {address}: снова работает, инцидент #{incident_id} длился {max(1, (duration or 0) // 60)} мин"
-        if address_at_open and address_at_open != address:
-            text += f"; адрес изменён {address_at_open} → {address}"
-    alerts.send_alert(
-        {
-            "type": "node",
-            "event": event,
-            "text": text,
-            "node_id": node_id,
-            "incident_id": incident_id,
-            "color": color,
-            "prev_color": prev,
-            "address": address,
-            "address_at_open": address_at_open,
-            "checkers_up": up,
-            "checkers_down": down,
-            "sources": names,
-            "ts": int(time.time()),
-        }
-    )
+    for route in alerts.source_routes(n["source_id"] for n in names):
+        ids = {s["id"] for s in route.sources}
+        mine = [n for n in names if n["source_id"] in ids]
+        title = ", ".join(f"{n['name'] or n['external_id']} ({n['source']})" for n in mine) or node_id
+        if event == "down":
+            text = f"[DOWN] {title} {address}: {COLOR_TEXT[color]} (видят {up} из {up + down})"
+        elif event == "changed":
+            text = (
+                f"[CHANGED] {title} {address}: {COLOR_TEXT.get(prev, prev)} → {COLOR_TEXT[color]} "
+                f"(видят {up} из {up + down})"
+            )
+        else:
+            mins = max(1, (duration or 0) // 60)
+            text = f"[UP] {title} {address}: снова работает, инцидент #{incident_id} длился {mins} мин"
+            if address_at_open and address_at_open != address:
+                text += f"; адрес изменён {address_at_open} → {address}"
+        alerts.send_routed(
+            route,
+            {
+                "type": "node",
+                "event": event,
+                "text": text,
+                "node_id": node_id,
+                "incident_id": incident_id,
+                "color": color,
+                "prev_color": prev,
+                "address": address,
+                "address_at_open": address_at_open,
+                "checkers_up": up,
+                "checkers_down": down,
+                "sources": mine,
+                "ts": int(time.time()),
+            },
+        )
 
 
 def checker_transitions(now=None):

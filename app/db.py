@@ -18,6 +18,11 @@ CREATE TABLE IF NOT EXISTS sources (
     token         TEXT NOT NULL DEFAULT '',
     export_url    TEXT NOT NULL DEFAULT '',
     export_token  TEXT NOT NULL DEFAULT '',
+    alert_url     TEXT NOT NULL DEFAULT '',   -- вебхук алертов по нодам источника; пусто — не слать
+    alert_token   TEXT NOT NULL DEFAULT '',
+    tg_token      TEXT NOT NULL DEFAULT '',   -- Telegram: токен бота
+    tg_chat       TEXT NOT NULL DEFAULT '',   -- Telegram: кому (@username, @канал, chat_id); пусто — не слать
+    tg_chat_id    TEXT NOT NULL DEFAULT '',   -- Telegram: найденный chat_id для tg_chat
     created_at    INTEGER NOT NULL,
     last_sync_at  INTEGER,
     last_sync_ok  INTEGER,
@@ -230,12 +235,26 @@ def init():
         ("node_state", "ok_since", "INTEGER"),
         ("node_checker_state", "ok_streak", "INTEGER NOT NULL DEFAULT 0"),
         ("node_checker_state", "ok_since", "INTEGER"),
+        ("sources", "tg_token", "TEXT NOT NULL DEFAULT ''"),
+        ("sources", "tg_chat", "TEXT NOT NULL DEFAULT ''"),
+        ("sources", "tg_chat_id", "TEXT NOT NULL DEFAULT ''"),
         ("checkers", "geo", "TEXT DEFAULT ''"),
         ("checkers", "geo_country", "TEXT DEFAULT ''"),
         ("checkers", "valid_since", "INTEGER"),
     ):
         if col not in {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:
             c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+    cols = {r[1] for r in c.execute("PRAGMA table_info(sources)")}
+    if "alert_url" not in cols:
+        # раньше вебхук был один на всю панель (настройки alert_webhook_*) — переносим его во все источники,
+        # чтобы алерты не пропали молча; лишние источники потом очищаются вручную
+        c.execute("ALTER TABLE sources ADD COLUMN alert_url TEXT NOT NULL DEFAULT ''")
+        c.execute("ALTER TABLE sources ADD COLUMN alert_token TEXT NOT NULL DEFAULT ''")
+        c.execute(
+            "UPDATE sources SET "
+            "alert_url = COALESCE((SELECT value FROM settings WHERE key='alert_webhook_url'), ''), "
+            "alert_token = COALESCE((SELECT value FROM settings WHERE key='alert_webhook_token'), '')"
+        )
     cols = {r[1] for r in c.execute("PRAGMA table_info(source_nodes)")}
     if "country" not in cols:
         c.execute("ALTER TABLE source_nodes ADD COLUMN country TEXT DEFAULT ''")

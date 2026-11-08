@@ -125,7 +125,8 @@ def offline_reason(row) -> str:
     """Почему чекер не online — для алертов и списка оповещений."""
     if blocked(row):
         where = geoip.place(geo(row)) or row["geo_country"]
-        return f"IP {row['public_ip']} вне {', '.join(sorted(allowed_countries()))} ({where}) — VPN? результаты не учитываются"
+        countries = ", ".join(sorted(allowed_countries()))
+        return f"IP {row['public_ip']} вне {countries} ({where}) — VPN? результаты не учитываются"
     return "нет heartbeat" if row["last_seen_at"] else "ещё не подключался"
 
 
