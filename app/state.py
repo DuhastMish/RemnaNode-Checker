@@ -16,7 +16,9 @@ node_state.ok_streak — green подряд у всех online-чекеров; �
 
 Инциденты и алерты (по агрегату):
   orange/red и нет открытого инцидента → открыть, алерт down;
-  orange ↔ red при открытом инциденте   → алерт changed;
+  orange → red при открытом инциденте   → алерт changed;
+  red → orange                           → ничего: нода уже была красной, частичное восстановление не
+                                           шлём, incidents.color остаётся red (худший), ждём green;
   green при открытом инциденте          → закрыть, алерт up (с адресом на момент открытия);
   grey (нет данных)                      → инциденты не трогаем и не шлём ничего — пропажу чекеров
                                            покрывает отдельный алерт checker offline/online.
@@ -199,7 +201,8 @@ def _incident_step(node_id, old, color, up, down):
             )
             db.x("UPDATE node_state SET incident_id=? WHERE node_id=?", (inc_id, node_id))
             _alert_node("down", node_id, inc_id, color, old, address, address, up, down)
-        elif inc["color"] != color:
+        elif inc["color"] != color and inc["color"] != "red":
+            # дошёл до красного — дальше молчим до зелёного: red → orange (→ red) не новость, ждём [UP]
             db.x("UPDATE incidents SET color=? WHERE id=?", (color, inc["id"]))
             _alert_node("changed", node_id, inc["id"], color, inc["color"], address, inc["address_at_open"], up, down)
     elif color == "green" and inc:

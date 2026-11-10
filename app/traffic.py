@@ -9,7 +9,8 @@ system.stats.interface.rxTotal / txTotal и usersOnline. Это счётчики
 База — медиана этой средней за предыдущий час (без последних RATE_WINDOW секунд).
 Обрыв: средняя < traffic_drop_pct % от базы дольше traffic_drop_min минут → событие throughput_drop
 («Активные оповещения» + вебхук). Восстановление: средняя ≥ RESTORE_PCT % от базы на момент обрыва →
-throughput_restored. Пустые ноды (база < traffic_min_mbps) и неактивные ноды не проверяются.
+throughput_restored. Пустые ноды (база < traffic_min_mbps), неактивные и красные (не видит ни один чекер —
+об этом уже алерт [DOWN]) не проверяются; уже открытый обрыв у красной ноды закрывается как обычно.
 """
 
 import time
@@ -59,7 +60,11 @@ def poll():
             continue
         sn_by_ext = {
             r["external_id"]: r
-            for r in db.q("SELECT id, external_id, is_active FROM source_nodes WHERE source_id=?", (src["id"],))
+            for r in db.q(
+                "SELECT sn.id, sn.external_id, sn.is_active, ns.color FROM source_nodes sn "
+                "LEFT JOIN node_state ns ON ns.node_id = sn.node_id WHERE sn.source_id=?",
+                (src["id"],),
+            )
         }
         got = 0
         for n in items:
@@ -73,7 +78,7 @@ def poll():
                 (sn["id"], now, totals[0], totals[1], int(users) if isinstance(users, (int, float)) else None),
             )
             got += 1
-            evaluate(sn["id"], bool(sn["is_active"]), now)
+            evaluate(sn["id"], bool(sn["is_active"]), now, node_red=sn["color"] == "red")
         parts.append(f"{src['name']}: {got} нод")
     last_poll.update(ts=now, msg="; ".join(parts) or "источников Remnawave нет")
 
@@ -122,8 +127,11 @@ def mbps(bps):
 # ---------- обрыв ----------
 
 
-def evaluate(sn_id, is_active, now=None):
-    """Пересчитать скорость и базу ноды источника, открыть/закрыть обрыв и отправить событие."""
+def evaluate(sn_id, is_active, now=None, node_red=False):
+    """Пересчитать скорость и базу ноды источника, открыть/закрыть обрыв и отправить событие.
+
+    node_red — цель красная (не видит ни один чекер): новый обрыв не открываем, об этом уже есть [DOWN].
+    """
     now = int(now or time.time())
     pct = settings.get("traffic_drop_pct")
     row = db.q1("SELECT below_since, drop_at, drop_base_bps FROM traffic_state WHERE sn_id=?", (sn_id,))
@@ -148,6 +156,9 @@ def evaluate(sn_id, is_active, now=None):
         if rate is not None and rate >= st["drop_base"] * RESTORE_PCT / 100:
             _alert(sn_id, "throughput_restored", rate, st["drop_base"], users, st["drop_at"], now)
             st.update(below_since=None, drop_at=None, drop_base=None)
+    elif node_red:
+        # нода лежит у всех чекеров — трафик падает сам собой, обрыв был бы дублем [DOWN]
+        st["below_since"] = None
     elif rate is not None and base is not None and base >= settings.get("traffic_min_mbps") * 1e6:
         if rate < base * pct / 100:
             st["below_since"] = st["below_since"] or now
