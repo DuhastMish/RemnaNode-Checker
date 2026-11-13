@@ -20,42 +20,37 @@
     {%- if node.is_active and node.color in ('orange', 'red') %} — основной недоступен, ноду можно поднять {{ 'на любом' if many else 'на нём' }}.
     {%- elif not node.is_active %} — ноду можно вернуть в работу {{ 'на любом' if many else 'на нём' }}.{% endif %}</p>{% endif %}
   <div class="actions">
-    <form method="post" action="/check"><input type="hidden" name="node_id" value="{{ node.id }}"><button type="submit">Проверить сейчас</button></form>
+    <form method="post" action="/check"><input type="hidden" name="node_id" value="{{ node.id }}"><button type="submit">Проверить сейчас{% if addresses and addresses.extras %} — все адреса ({{ 1 + addresses.extras|length }}){% endif %}</button></form>
     <a class="btn secondary" href="/?source={{ linked[0].source_id if linked else '' }}">← к списку</a>
   </div>
 </div>
 
 {% if addresses %}
 <div class="card">
-  <h2>Адреса VPS <span class="muted" style="font-size:13px;font-weight:400">доп. адреса из Remnawave, проверяются отдельно; алерт — только когда основной лежит</span></h2>
+  <h2>Адреса VPS <span class="muted" style="font-size:13px;font-weight:400">основной и доп. из Remnawave; алерт по доп. — только когда основной лежит</span></h2>
   <table>
-    <tr><th></th><th>Адрес</th><th>В Remnawave</th><th>Проверки</th><th>Рабочий подряд</th><th>Проверен</th><th></th></tr>
+    <tr><th></th><th>Адрес</th><th>Проверки</th><th>Рабочий подряд</th><th>Проверен</th></tr>
     <tr>
       <td><span class="dot {{ node.probe_color }}"></span></td>
-      <td><code>{{ node.address or '—' }}</code></td>
-      <td><span class="badge">основной</span></td>
+      <td><code style="color:var(--text)">{{ node.address or '—' }}</code></td>
       <td>{{ COLOR_LABEL[node.probe_color] }}{% if node.probe_color != 'grey' %} <span class="muted">(видят {{ node.up_count or 0 }} из {{ (node.up_count or 0) + (node.down_count or 0) }})</span>{% endif %}</td>
       <td>{% if node.ok_streak %}{{ node.ok_streak }} <span class="muted">· {{ node.ok_since|duration }}</span>{% else %}—{% endif %}</td>
       <td class="muted">{{ node.checked_at|ago }}</td>
-      <td></td>
     </tr>
     {% for e in addresses.extras %}
     <tr>
       <td><span class="dot {{ e.probe_color }}"></span></td>
-      <td><code>{{ e.address }}</code>{% if e.available %} <span class="ok">доступен</span>{% endif %}</td>
-      <td>{% if e.ip_status %}<span class="badge">{{ e.ip_status }}</span>{% else %}—{% endif %}</td>
+      <td><code class="muted">{{ e.address }}</code>{% if e.available %} <span class="ok">доступен</span>{% endif %}</td>
       <td>{{ COLOR_LABEL[e.probe_color] }}{% if e.probe_color != 'grey' %} <span class="muted">(видят {{ e.up_count or 0 }} из {{ (e.up_count or 0) + (e.down_count or 0) }})</span>{% endif %}</td>
       <td>{% if e.ok_streak %}{{ e.ok_streak }} <span class="muted">· {{ e.ok_since|duration }}</span>{% else %}—{% endif %}</td>
       <td class="muted">{{ e.checked_at|ago }}</td>
-      <td><form method="post" action="/check" style="margin:0"><input type="hidden" name="node_id" value="{{ e.id }}"><button type="submit" class="secondary">Проверить</button></form></td>
     </tr>
     {% endfor %}
     {% for sk in addresses.skipped %}
     <tr class="muted">
       <td></td>
-      <td><code>{{ sk.ip }}</code></td>
-      <td>{% if sk.status %}<span class="badge">{{ sk.status }}</span>{% else %}—{% endif %}</td>
-      <td colspan="4">{{ sk.reason }}</td>
+      <td><code class="muted">{{ sk.ip }}</code></td>
+      <td colspan="3">{{ sk.reason }}</td>
     </tr>
     {% endfor %}
   </table>

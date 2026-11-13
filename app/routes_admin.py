@@ -82,7 +82,7 @@ def check_post(request: Request, source_id: str = Form(""), node_id: str = Form(
             return RedirectResponse(f"/?source={source_id}&msg=Введи домен, IP или IP:порт", status_code=303)
         targets = [t]
     elif node_id:
-        targets = [jobs.target_for_node(node_id)]
+        targets = _with_extras([node_id])
     elif source_id:
         ids = [
             r["node_id"]
@@ -92,13 +92,22 @@ def check_post(request: Request, source_id: str = Form(""), node_id: str = Form(
                 (source_id,),
             )
         ]
-        targets = [jobs.target_for_node(i) for i in ids]
+        targets = _with_extras(ids)
     else:
         targets = []
     job_id = jobs.create(targets, "admin")
     if not job_id:
         return RedirectResponse("/?msg=Нет нод для проверки", status_code=303)
     return RedirectResponse(f"/jobs/{job_id}", status_code=303)
+
+
+def _with_extras(node_ids):
+    """Цели ручной проверки: ноды вместе с их доп. адресами."""
+    out = []
+    for node_id in node_ids:
+        out.append(jobs.target_for_node(node_id))
+        out += [jobs.target_for_node(r["id"]) for r in db.q("SELECT id FROM nodes WHERE parent_id=?", (node_id,))]
+    return out
 
 
 @router.get("/check/json")

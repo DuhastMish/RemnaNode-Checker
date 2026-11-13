@@ -76,8 +76,8 @@ def extra_addresses(sns, primary_address):
             if ip in checked:
                 continue
             if ip == primary:
-                skipped.append({"ip": ip, "status": status, "reason": "основной адрес — проверяется один раз"})
-            elif ":" in ip:
+                continue  # основной уже в списке — второй раз не показываем и не проверяем
+            if ":" in ip:
                 skipped.append({"ip": ip, "status": status, "reason": "IPv6 — чекер проверяет только IPv4"})
             else:
                 checked[ip] = status
