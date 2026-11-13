@@ -116,6 +116,7 @@ def nodes_with_state(source_id=None):
     sql += " ORDER BY sn.name, sn.address"
     rows = [dict(r) for r in db.q(sql, args)]
     dups = nodes.duplicate_addresses()
+    extra = extras_summary()
     hist = history([r["node_id"] for r in rows])
     for r in rows:
         r["dup"] = r["address"] in dups
@@ -123,7 +124,24 @@ def nodes_with_state(source_id=None):
         r.update(hist.get(r["node_id"]) or EMPTY_HISTORY)
         r["view"] = view_state(r)
         r["revivable"] = revivable(r)
+        r["extra_total"], r["extra_up"] = extra.get(r["node_id"], (0, []))
     return rows
+
+
+def extras_summary():
+    """node_id основной цели → (сколько доп. адресов проверяется, [доступные: все online-чекеры видят их green
+    extra_ok_streak проверок подряд])."""
+    need = max(1, settings.get("extra_ok_streak"))
+    out: dict = {}
+    for r in db.q(
+        "SELECT n.parent_id, n.address, ns.probe_color, ns.ok_streak FROM nodes n "
+        "LEFT JOIN node_state ns ON ns.node_id = n.id WHERE n.parent_id IS NOT NULL ORDER BY ns.ok_since, n.address"
+    ):
+        total, up = out.setdefault(r["parent_id"], (0, []))
+        if r["probe_color"] == "green" and (r["ok_streak"] or 0) >= need:
+            up.append(r["address"])
+        out[r["parent_id"]] = (total + 1, up)
+    return out
 
 
 # ---------- история для полосы на карточке ----------
@@ -285,6 +303,13 @@ def active_alerts(source_id=None):
         up, down = r["up_count"] or 0, r["down_count"] or 0
         text = f"не видят {down} из {up + down} чекеров" if up + down else "нет свежих данных"
         node_alert(r["node_id"], r["address"], r["color"] or "red", text, r["opened_at"])
+        avail = [a["address"] for a in state.available_extras(r["node_id"])]
+        if avail:
+            if len(avail) == 1:
+                text = f"доступен доп. адрес {avail[0]} — можно поднять ноду на нём"
+            else:
+                text = f"доступны доп. адреса {', '.join(avail)} — можно поднять ноду на любом"
+            node_alert(r["node_id"], r["address"], "green", {"text": text, "cls": "ok"}, r["opened_at"])
     drops = [d for d in traffic.open_drops() if source_id is None or d["source_id"] == source_id]
     multi = {
         r["node_id"]
@@ -328,7 +353,7 @@ def active_alerts(source_id=None):
         for r in db.q(
             "SELECT n.id AS node_id, n.address, ns.ok_streak, ns.ok_since, ns.up_count FROM nodes n "
             "JOIN node_state ns ON ns.node_id = n.id "
-            "WHERE n.is_active = 0 AND ns.probe_color = 'green' AND ns.ok_streak >= ?"
+            "WHERE n.is_active = 0 AND n.parent_id IS NULL AND ns.probe_color = 'green' AND ns.ok_streak >= ?"
             + in_source
             + " ORDER BY ns.ok_since",
             (need, *args),

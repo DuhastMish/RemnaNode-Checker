@@ -4,7 +4,7 @@
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from . import auth, db, jobs, nodes, routes_status, settings, sources, traffic, views
+from . import auth, db, jobs, nodes, routes_status, settings, sources, state, traffic, views
 
 router = APIRouter()
 
@@ -149,9 +149,25 @@ def _traffic_charts(node_id):
     return out
 
 
+def _addresses(node, linked):
+    """Блок «Адреса VPS»: основной, доп. с состоянием, и доп., которые отдельно не проверяются."""
+    extras = nodes.extras(node["id"])
+    _, skipped = nodes.extra_addresses(linked, node["address"])
+    if not extras and not skipped:
+        return None
+    order = [a["id"] for a in state.available_extras(node["id"])]  # первым — дольше всех рабочий
+    for e in extras:
+        e["available"] = e["id"] in order
+    available = sorted((e for e in extras if e["available"]), key=lambda e: order.index(e["id"]))
+    return {"extras": extras, "skipped": skipped, "available": available}
+
+
 @router.get("/node/{node_id}")
-def node_page(request: Request, node_id: str):
+def node_page(request: Request, node_id: str, addr: str = ""):
     auth.require_admin(request)
+    parent = db.q1("SELECT parent_id FROM nodes WHERE id=?", (node_id,))
+    if parent and parent["parent_id"]:
+        return RedirectResponse(f"/node/{parent['parent_id']}", status_code=303)
     node = db.q1(
         "SELECT n.*, COALESCE(ns.color, 'grey') AS color, COALESCE(ns.probe_color, 'grey') AS probe_color, "
         "COALESCE(ns.ok_streak, 0) AS ok_streak, ns.ok_since, "
@@ -164,19 +180,30 @@ def node_page(request: Request, node_id: str):
         return RedirectResponse("/?msg=Нода не найдена", status_code=303)
     node = dict(node, target_active=node["is_active"])
     node["revivable"] = views.revivable(node)
+    linked = nodes.linked(node_id)
+    addresses = _addresses(node, linked)
+    # история: основной и доп. адреса вместе, ?addr= — только один адрес
+    family = [node_id] + [e["id"] for e in (addresses["extras"] if addresses else [])]
+    marks = ",".join("?" * len(family))
+    where, args = f"r.node_id IN ({marks})", list(family)
+    if addr:
+        where += " AND r.target_address = ?"
+        args.append(addr)
     hist = [
         dict(r)
         for r in db.q(
             "SELECT r.*, c.name AS checker_name FROM results r LEFT JOIN checkers c ON c.id = r.checker_id "
-            "WHERE r.node_id=? ORDER BY r.id DESC LIMIT 50",
-            (node_id,),
+            f"WHERE {where} ORDER BY r.id DESC LIMIT 50",
+            args,
         )
     ]
     return views.render(
         request,
         "node.html",
         node=node,
-        linked=nodes.linked(node_id),
+        addresses=addresses,
+        hist_addr=addr,
+        linked=linked,
         charts=_traffic_charts(node_id),
         hist=hist,
         mismatch=nodes.address_mismatch(node_id),

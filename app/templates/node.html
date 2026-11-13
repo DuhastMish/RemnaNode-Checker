@@ -15,11 +15,52 @@
   {% if not node.is_active %}<p class="muted">Нода отключена в источнике: проверяется как обычно, но плитка серая,
     инцидентов и алертов нет. Если проверки проходят — включите её в источнике.</p>{% endif %}
   {% if mismatch %}<p class="bad">Адреса связанных нод разошлись — проверяется адрес основной ноды.</p>{% endif %}
+  {% if addresses and addresses.available %}{% set many = addresses.available|length > 1 %}
+  <p class="ok"><b>{{ 'Доступны доп. адреса' if many else 'Доступен доп. адрес' }} {{ addresses.available|map(attribute='address')|join(', ') }}</b>
+    {%- if node.is_active and node.color in ('orange', 'red') %} — основной недоступен, ноду можно поднять {{ 'на любом' if many else 'на нём' }}.
+    {%- elif not node.is_active %} — ноду можно вернуть в работу {{ 'на любом' if many else 'на нём' }}.{% endif %}</p>{% endif %}
   <div class="actions">
     <form method="post" action="/check"><input type="hidden" name="node_id" value="{{ node.id }}"><button type="submit">Проверить сейчас</button></form>
     <a class="btn secondary" href="/?source={{ linked[0].source_id if linked else '' }}">← к списку</a>
   </div>
 </div>
+
+{% if addresses %}
+<div class="card">
+  <h2>Адреса VPS <span class="muted" style="font-size:13px;font-weight:400">доп. адреса из Remnawave, проверяются отдельно; алерт — только когда основной лежит</span></h2>
+  <table>
+    <tr><th></th><th>Адрес</th><th>В Remnawave</th><th>Проверки</th><th>Рабочий подряд</th><th>Проверен</th><th></th></tr>
+    <tr>
+      <td><span class="dot {{ node.probe_color }}"></span></td>
+      <td><code>{{ node.address or '—' }}</code></td>
+      <td><span class="badge">основной</span></td>
+      <td>{{ COLOR_LABEL[node.probe_color] }}{% if node.probe_color != 'grey' %} <span class="muted">(видят {{ node.up_count or 0 }} из {{ (node.up_count or 0) + (node.down_count or 0) }})</span>{% endif %}</td>
+      <td>{% if node.ok_streak %}{{ node.ok_streak }} <span class="muted">· {{ node.ok_since|duration }}</span>{% else %}—{% endif %}</td>
+      <td class="muted">{{ node.checked_at|ago }}</td>
+      <td></td>
+    </tr>
+    {% for e in addresses.extras %}
+    <tr>
+      <td><span class="dot {{ e.probe_color }}"></span></td>
+      <td><code>{{ e.address }}</code>{% if e.available %} <span class="ok">доступен</span>{% endif %}</td>
+      <td>{% if e.ip_status %}<span class="badge">{{ e.ip_status }}</span>{% else %}—{% endif %}</td>
+      <td>{{ COLOR_LABEL[e.probe_color] }}{% if e.probe_color != 'grey' %} <span class="muted">(видят {{ e.up_count or 0 }} из {{ (e.up_count or 0) + (e.down_count or 0) }})</span>{% endif %}</td>
+      <td>{% if e.ok_streak %}{{ e.ok_streak }} <span class="muted">· {{ e.ok_since|duration }}</span>{% else %}—{% endif %}</td>
+      <td class="muted">{{ e.checked_at|ago }}</td>
+      <td><form method="post" action="/check" style="margin:0"><input type="hidden" name="node_id" value="{{ e.id }}"><button type="submit" class="secondary">Проверить</button></form></td>
+    </tr>
+    {% endfor %}
+    {% for sk in addresses.skipped %}
+    <tr class="muted">
+      <td></td>
+      <td><code>{{ sk.ip }}</code></td>
+      <td>{% if sk.status %}<span class="badge">{{ sk.status }}</span>{% else %}—{% endif %}</td>
+      <td colspan="4">{{ sk.reason }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
 
 {% for c in charts %}
 {% set st = c.chart.state or {} %}
@@ -109,7 +150,12 @@
 {% endif %}
 
 <div class="card">
-  <h2>История (последние {{ hist|length }})</h2>
+  <h2>История (последние {{ hist|length }})
+    {%- if addresses and addresses.extras %} <span class="muted" style="font-size:13px;font-weight:400">
+      {% if hist_addr %}<a href="/node/{{ node.id }}">все адреса</a>{% else %}все адреса{% endif %}
+      {%- for a in [node.address] + addresses.extras|map(attribute='address')|list %} ·
+        {% if hist_addr == a %}<b>{{ a }}</b>{% else %}<a href="/node/{{ node.id }}?addr={{ a|urlencode }}">{{ a }}</a>{% endif %}
+      {%- endfor %}</span>{% endif %}</h2>
   <table>
     <tr><th></th><th>Время</th><th>Чекер</th><th>Адрес</th><th>SSH</th><th>Прокси</th><th>Задержка</th><th>Задание</th></tr>
     {% for h in hist %}

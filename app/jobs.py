@@ -42,7 +42,10 @@ def target_from_text(text):
     if not parsed:
         return None
     host, port = parsed
-    n = db.q1("SELECT id, fresh_port FROM nodes WHERE address=? ORDER BY is_active DESC LIMIT 1", (host,))
+    n = db.q1(
+        "SELECT id, fresh_port FROM nodes WHERE address=? ORDER BY parent_id IS NOT NULL, is_active DESC LIMIT 1",
+        (host,),
+    )
     if n:
         return {"node_id": n["id"], "address": host, "port": port or n["fresh_port"]}
     return {"node_id": None, "address": host, "port": port}

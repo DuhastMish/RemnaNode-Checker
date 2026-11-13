@@ -70,6 +70,8 @@
   </div>
   {% if admin %}
     {% if r.traffic_drop_at and r.target_active %}<div class="warn">обрыв трафика · {{ r.traffic_drop_at|duration }}</div>{% endif %}
+    {% if r.extra_up and r.view in ('down', 'inactive') %}<div class="ok extra">↻ можно поднять на {{ r.extra_up|join(', ') }}</div>
+    {% elif r.extra_total %}<div class="extra muted">доп. адресов: {{ r.extra_total }}{% if r.extra_up %} · доступно {{ r.extra_up|length }}{% endif %}</div>{% endif %}
     {% if r.flags %}<div class="flags">{{ r.flags }}</div>{% endif %}
     {% if r.mismatch %}<div class="warn">адрес отличается от основной ноды ({{ r.target_address }})</div>
     {% elif r.dup and r.linked_count == 1 %}<div class="warn">такой адрес есть у другой ноды — связать?</div>{% endif %}

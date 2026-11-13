@@ -22,8 +22,15 @@ node_state.ok_streak — green подряд у всех online-чекеров; �
   green при открытом инциденте          → закрыть, алерт up (с адресом на момент открытия);
   grey (нет данных)                      → инциденты не трогаем и не шлём ничего — пропажу чекеров
                                            покрывает отдельный алерт checker offline/online.
+
+Доп. адреса VPS (nodes.parent_id): агрегат считается так же, но инцидентов и своих алертов нет — пока
+основной адрес жив, доп. никого не интересуют. Доступен — все online-чекеры видят его green
+extra_ok_streak проверок подряд. Если у основной цели открыт инцидент и появился доступный доп. адрес,
+о котором по этому инциденту ещё не сообщали, — алерт addr_up «можно поднять ноду на адресе X».
+Дальше по обычной схеме: адрес переключили в источнике → состояние доп. цели переходит основной → up.
 """
 
+import json
 import threading
 import time
 
@@ -159,7 +166,7 @@ def recompute(node_id, online=None, now=None):
     node_state.updated_at — время последнего результата (для «проверена N мин назад»).
     """
     probe, up, down, last_ts, (ok_streak, ok_since) = aggregate(node_id, online, now)
-    node = db.q1("SELECT is_active FROM nodes WHERE id=?", (node_id,))
+    node = db.q1("SELECT is_active, parent_id FROM nodes WHERE id=?", (node_id,))
     color = probe if node and node["is_active"] else "grey"
     with _lock:
         row = db.q1("SELECT color FROM node_state WHERE node_id=?", (node_id,))
@@ -172,8 +179,89 @@ def recompute(node_id, online=None, now=None):
             "up_count=excluded.up_count, down_count=excluded.down_count, updated_at=excluded.updated_at",
             (node_id, color, probe, ok_streak, ok_since, up, down, last_ts),
         )
-        _incident_step(node_id, old, color, up, down)
+        parent = node["parent_id"] if node else None
+        if not parent:
+            _incident_step(node_id, old, color, up, down)
+        _extra_step(parent or node_id)
     return old, color
+
+
+def available_extras(node_id):
+    """Доп. адреса основной цели, которые все online-чекеры видят рабочими extra_ok_streak проверок подряд.
+    Первым — тот, что дольше всех рабочий."""
+    need = max(1, settings.get("extra_ok_streak"))
+    return [
+        dict(r)
+        for r in db.q(
+            "SELECT n.id, n.address, n.ip_status, ns.ok_streak, ns.ok_since, ns.up_count FROM nodes n "
+            "JOIN node_state ns ON ns.node_id = n.id "
+            "WHERE n.parent_id=? AND ns.probe_color='green' AND ns.ok_streak >= ? ORDER BY ns.ok_since, n.address",
+            (node_id, need),
+        )
+    ]
+
+
+def _plural(n, one, few, many):
+    if n % 10 == 1 and n % 100 != 11:
+        return one
+    return few if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else many
+
+
+def _extra_step(node_id):
+    """Основная нода лежит (открыт инцидент), а доп. адрес доступен — алерт, по одному разу на адрес и инцидент."""
+    inc = db.q1("SELECT * FROM incidents WHERE node_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1", (node_id,))
+    if not inc:
+        return
+    node = db.q1(
+        "SELECT n.address, n.is_active, ns.color, ns.up_count, ns.down_count FROM nodes n "
+        "LEFT JOIN node_state ns ON ns.node_id = n.id WHERE n.id=?",
+        (node_id,),
+    )
+    if not node or not node["is_active"] or node["color"] not in DOWN_COLORS:
+        return
+    try:
+        announced = set(json.loads(inc["extra_announced"] or "[]"))
+    except ValueError:
+        announced = set()
+    new = [a for a in available_extras(node_id) if a["address"] not in announced]
+    if not new:
+        return
+    db.x(
+        "UPDATE incidents SET extra_announced=? WHERE id=?",
+        (json.dumps(sorted(announced | {a["address"] for a in new})), inc["id"]),
+    )
+    streak = min(a["ok_streak"] for a in new)
+    checks = f"{streak} {_plural(streak, 'проверку', 'проверки', 'проверок')} подряд"
+    if len(new) == 1:
+        avail = f"доступен доп. адрес {new[0]['address']} — все чекеры видят его рабочим {checks}. Можно поднять ноду на нём"
+    else:
+        addrs = ", ".join(a["address"] for a in new)
+        avail = f"доступны доп. адреса {addrs} — все чекеры видят их рабочими {checks}. Можно поднять ноду на любом"
+    address = node["address"]
+    _send_node(
+        node_id,
+        lambda title: f"[ADDR UP] {title} {address}: {COLOR_TEXT[node['color']]}, но {avail}",
+        {
+            "type": "node",
+            "event": "addr_up",
+            "node_id": node_id,
+            "incident_id": inc["id"],
+            "color": node["color"],
+            "address": address,
+            "checkers_up": node["up_count"] or 0,
+            "checkers_down": node["down_count"] or 0,
+            "extra_addresses": [
+                {
+                    "address": a["address"],
+                    "ip_status": a["ip_status"],
+                    "checkers_up": a["up_count"] or 0,
+                    "ok_streak": a["ok_streak"],
+                    "ok_since": a["ok_since"],
+                }
+                for a in new
+            ],
+        },
+    )
 
 
 def _node_label(node_id):
@@ -222,44 +310,50 @@ def _incident_step(node_id, old, color, up, down):
         )
 
 
-def _alert_node(event, node_id, incident_id, color, prev, address, address_at_open, up, down, duration=None):
-    """Алерт по ноде — в вебхуки её источников. В текст и payload попадают только имена нод тех источников,
-    в чей вебхук он уходит (чужие источники связанной ноды не светятся)."""
+def _send_node(node_id, text_for, payload):
+    """Алерт по ноде — в каналы её источников. В текст и payload попадают только имена нод тех источников,
+    в чей канал он уходит (чужие источники связанной ноды не светятся). text_for(title) → text."""
     names = _node_label(node_id)
     for route in alerts.source_routes(n["source_id"] for n in names):
         ids = {s["id"] for s in route.sources}
         mine = [n for n in names if n["source_id"] in ids]
         title = ", ".join(f"{n['name'] or n['external_id']} ({n['source']})" for n in mine) or node_id
+        alerts.send_routed(route, {**payload, "text": text_for(title), "sources": mine, "ts": int(time.time())})
+
+
+def _alert_node(event, node_id, incident_id, color, prev, address, address_at_open, up, down, duration=None):
+    """Алерт по инциденту ноды: down | changed | up."""
+
+    def text_for(title):
         if event == "down":
-            text = f"[DOWN] {title} {address}: {COLOR_TEXT[color]} (видят {up} из {up + down})"
-        elif event == "changed":
-            text = (
+            return f"[DOWN] {title} {address}: {COLOR_TEXT[color]} (видят {up} из {up + down})"
+        if event == "changed":
+            return (
                 f"[CHANGED] {title} {address}: {COLOR_TEXT.get(prev, prev)} → {COLOR_TEXT[color]} "
                 f"(видят {up} из {up + down})"
             )
-        else:
-            mins = max(1, (duration or 0) // 60)
-            text = f"[UP] {title} {address}: снова работает, инцидент #{incident_id} длился {mins} мин"
-            if address_at_open and address_at_open != address:
-                text += f"; адрес изменён {address_at_open} → {address}"
-        alerts.send_routed(
-            route,
-            {
-                "type": "node",
-                "event": event,
-                "text": text,
-                "node_id": node_id,
-                "incident_id": incident_id,
-                "color": color,
-                "prev_color": prev,
-                "address": address,
-                "address_at_open": address_at_open,
-                "checkers_up": up,
-                "checkers_down": down,
-                "sources": mine,
-                "ts": int(time.time()),
-            },
-        )
+        mins = max(1, (duration or 0) // 60)
+        text = f"[UP] {title} {address}: снова работает, инцидент #{incident_id} длился {mins} мин"
+        if address_at_open and address_at_open != address:
+            text += f"; адрес изменён {address_at_open} → {address}"
+        return text
+
+    _send_node(
+        node_id,
+        text_for,
+        {
+            "type": "node",
+            "event": event,
+            "node_id": node_id,
+            "incident_id": incident_id,
+            "color": color,
+            "prev_color": prev,
+            "address": address,
+            "address_at_open": address_at_open,
+            "checkers_up": up,
+            "checkers_down": down,
+        },
+    )
 
 
 def checker_transitions(now=None):

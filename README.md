@@ -43,28 +43,51 @@ Remnawave / Open60 ──sync──▶ Панель (UI, агрегация, а�
 
 ## Алерты
 
-`POST <URL из «Настройки → Алерты»>`, `Authorization: Bearer <токен>` (если задан).
+Каналы задаются у каждого источника на странице «Источники»: вебхук и/или Telegram; ничего не задано — алерты
+этого источника не отправляются. Алерт по ноде уходит в каналы её источника (у связанной ноды — в каждый,
+в тексте только имена из этого источника), пропажа и возврат чекеров — во все каналы; один адресат у
+нескольких источников получает одно сообщение.
+
+**Telegram** — токен бота от @BotFather и адресат: `@username`, `@канал` или chat_id. Бот не может написать
+человеку первым: напишите боту `/start`, затем «Тест Telegram» найдёт chat_id в `getUpdates` (сообщения за сутки)
+и запомнит его. В канал бот пишет, если он там администратор. Сообщение — тот же `text`, что в вебхуке.
+Из РФ `api.telegram.org` может быть недоступен — запросы идут через «Исходящий VPS», если он настроен.
+
+**Вебхук** — `POST` JSON, `Authorization: Bearer <токен>`, если токен задан. `source` / `source_ids` — источники,
+в чей вебхук ушёл алерт.
 
 ```json
 {"type": "node", "event": "down | changed | up", "text": "[DOWN] DE-1 (Main) 1.2.3.4: недоступна у части чекеров (видят 1 из 2)",
  "node_id": "uuid", "incident_id": 12, "color": "orange", "prev_color": "green",
  "address": "1.2.3.4", "address_at_open": "1.2.3.4", "checkers_up": 1, "checkers_down": 1,
- "sources": [{"source": "Main", "name": "DE-1", "external_id": "uuid-в-источнике"}], "ts": 1762500000}
+ "sources": [{"source": "Main", "source_id": 1, "name": "DE-1", "external_id": "uuid-в-источнике", "country": "DE"}],
+ "source": "Main", "source_ids": [1], "ts": 1762500000}
+
+{"type": "node", "event": "addr_up",
+ "text": "[ADDR UP] DE-1 (Main) 1.2.3.4: недоступна у всех чекеров, но доступен доп. адрес 5.6.7.8 — …",
+ "node_id": "uuid", "incident_id": 12, "color": "red", "address": "1.2.3.4", "checkers_up": 0, "checkers_down": 2,
+ "extra_addresses": [{"address": "5.6.7.8", "ip_status": "BLOCKED", "checkers_up": 2, "ok_streak": 3, "ok_since": 1762499400}],
+ "sources": [...], "source": "Main", "source_ids": [1], "ts": 1762500000}
 
 {"type": "checker", "event": "offline | online", "text": "[CHECKER OFFLINE] Дом пропал: …",
- "checker_id": "uuid", "name": "Дом", "last_seen_at": 1762500000, "ts": 1762500090}
+ "reason": "heartbeat | country", "checker_id": "uuid", "name": "Дом", "public_ip": "…", "country": "RU",
+ "last_seen_at": 1762500000, "source": "Main", "source_ids": [1], "ts": 1762500090}
 
 {"type": "traffic", "event": "throughput_drop | throughput_restored",
  "text": "[THROUGHPUT DROP] DE-1 (Main) 1.2.3.4: трафик 204.5 → 22.9 Мбит/с (−89%)",
- "node_id": "uuid", "source": "Main", "name": "DE-1", "external_id": "uuid-в-источнике", "country": "DE",
+ "node_id": "uuid", "name": "DE-1", "external_id": "uuid-в-источнике", "country": "DE",
  "address": "1.2.3.4", "rate_mbps": 22.9, "baseline_mbps": 204.5, "users_online": 107,
- "drop_started_at": 1762499000, "ts": 1762500000}
+ "drop_started_at": 1762499000, "source": "Main", "source_ids": [1], "ts": 1762500000}
 ```
 
-`down` — открыт инцидент (нода стала оранжевой или красной), `changed` — оранжевый ↔ красный,
+`down` — открыт инцидент (нода стала оранжевой или красной), `changed` — оранжевый → красный,
 `up` — инцидент закрыт; если адрес за время инцидента сменился, это указано в `text`.
-`throughput_drop` — обрыв трафика ноды Remnawave (замедление ТСПУ / fair-use хостера), `throughput_restored` —
-скорость вернулась (≥ 70% от прежней).
+`addr_up` — основной адрес лежит (открыт инцидент), а доп. адрес VPS из Remnawave (`ips` ноды) все чекеры видят
+рабочим «Доп. адрес VPS «доступен»» проверок подряд: на него можно перевести ноду. По каждому адресу — один раз за
+инцидент; пока основной адрес жив, по доп. адресам алертов нет. После красного
+оранжевые не шлются: красный → оранжевый молча, следующий алерт по инциденту — `up`.
+`throughput_drop` — обрыв трафика ноды Remnawave (замедление ТСПУ / fair-use хостера; у красной ноды не
+открывается — там уже есть `down`), `throughput_restored` — скорость вернулась (≥ 70% от прежней).
 
 ## Экспорт
 

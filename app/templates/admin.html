@@ -28,7 +28,8 @@
       <span>{% if a.country %}<span class="flag" title="{{ a.country }}">{{ a.country|flag }}</span>{% endif %}<b>{{ a.title }}</b>{% if a.sources %} <span class="muted">· {{ a.sources }}</span>{% endif %}</span>
       <span class="muted">{% if a.address %}<code>{{ a.address }}</code> · {% endif %}{{ a.lines[0] }}</span>
       {%- for line in a.lines[1:] %}
-      <span class="muted">{{ line }}</span>
+      {%- if line is mapping %}<span class="{{ line.cls }}">{{ line.text }}</span>
+      {%- else %}<span class="muted">{{ line }}</span>{% endif %}
       {%- endfor %}
     </span>
     <span class="since" title="{{ a.since|dt }}">{% if a.since %}{{ a.since|duration }}{% endif %}</span>

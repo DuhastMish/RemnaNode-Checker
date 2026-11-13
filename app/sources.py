@@ -5,6 +5,7 @@
 Новая нода источника получает собственную цель проверки; связывание — только вручную (nodes.link).
 """
 
+import ipaddress
 import json
 import time
 import urllib.error
@@ -26,13 +27,32 @@ def _get_json(url, token, timeout=15):
         return json.load(resp)
 
 
-# ---------- адаптеры типов: всё приводится к {external_id, name, address, flags, country, fresh_port, is_active} ----------
+# ---------- адаптеры типов: всё приводится к {external_id, name, address, flags, country, fresh_port, is_active, ips} ----------
 
 
 def _country(code):
     """Двухбуквенный код страны или ''. Remnawave шлёт XX, если страна не задана."""
     code = str(code or "").strip().upper()
     return code if len(code) == 2 and code.isascii() and code.isalpha() and code != "XX" else ""
+
+
+def _ips(raw):
+    """Remnawave ips → JSON [{"ip", "status"}]: адрес в каноническом виде, мусор и повторы отброшены.
+
+    Поля нет у Remnawave до августа 2026 — тогда пустой список.
+    """
+    out, seen = [], set()
+    for i in raw if isinstance(raw, list) else []:
+        if not isinstance(i, dict):
+            continue
+        try:
+            ip = str(ipaddress.ip_address(str(i.get("ip") or "").strip()))
+        except ValueError:
+            continue
+        if ip not in seen:
+            seen.add(ip)
+            out.append({"ip": ip, "status": str(i.get("status") or "").upper()[:20]})
+    return json.dumps(out[:64])
 
 
 def _remnawave_item(n):
@@ -49,6 +69,7 @@ def _remnawave_item(n):
         "country": _country(n.get("countryCode")),
         "fresh_port": None,
         "is_active": 0 if n.get("isDisabled") else 1,
+        "ips": _ips(n.get("ips")),
     }
 
 
@@ -117,8 +138,8 @@ def _upsert(source_id, item, now):
     )
     if row:
         db.x(
-            "UPDATE source_nodes SET name=?, address=?, flags=?, country=?, fresh_port=?, is_active=?, last_seen_at=? "
-            "WHERE id=?",
+            "UPDATE source_nodes SET name=?, address=?, flags=?, country=?, fresh_port=?, is_active=?, ips=?, "
+            "last_seen_at=? WHERE id=?",
             (
                 item["name"],
                 item["address"],
@@ -126,6 +147,7 @@ def _upsert(source_id, item, now):
                 item.get("country", ""),
                 item["fresh_port"],
                 item["is_active"],
+                item.get("ips", "[]"),
                 now,
                 row["id"],
             ),
@@ -134,7 +156,7 @@ def _upsert(source_id, item, now):
     node_id = nodes.create_target(now)
     db.x(
         "INSERT INTO source_nodes(source_id, external_id, name, address, flags, country, fresh_port, is_active, "
-        "node_id, is_primary, last_seen_at) VALUES(?,?,?,?,?,?,?,?,?,1,?)",
+        "ips, node_id, is_primary, last_seen_at) VALUES(?,?,?,?,?,?,?,?,?,?,1,?)",
         (
             source_id,
             item["external_id"],
@@ -144,6 +166,7 @@ def _upsert(source_id, item, now):
             item.get("country", ""),
             item["fresh_port"],
             item["is_active"],
+            item.get("ips", "[]"),
             node_id,
             now,
         ),
@@ -173,7 +196,7 @@ def sync_source(source_id):
         return False, str(e)[:200], []
 
     now = int(time.time())
-    touched, changed = set(), []
+    touched, changed, fresh = set(), [], []
     with nodes.lock:
         for item in items:
             touched.add(_upsert(source_id, item, now))
@@ -184,11 +207,13 @@ def sync_source(source_id):
                 db.x("DELETE FROM source_nodes WHERE id=?", (r["id"],))
                 touched.add(r["node_id"])
         for node_id in touched:
-            if nodes.recompute(node_id)["changed"]:
+            res = nodes.recompute(node_id)
+            if res["changed"]:
                 changed.append(node_id)
+            fresh += res["new_extras"]
     msg = f"{len(items)} нод, изменилось целей: {len(changed)}"
     _set_status(source_id, True, msg)
-    urgent_check(changed)
+    urgent_check(changed + fresh)
     return True, msg, changed
 
 
@@ -212,12 +237,16 @@ def sync_node(source_node_id):
     with nodes.lock:
         node_id = _upsert(src["id"], item, int(time.time()))
         res = nodes.recompute(node_id)
+    if res["new_extras"]:
+        urgent_check(res["new_extras"])
     if res["changed"]:
         msg = "обновлена"
         if res["old_address"] != res["new_address"]:
             msg += f", адрес изменён {res['old_address']} → {res['new_address']}"
         urgent_check([node_id])
         return True, msg, [node_id]
+    if res["extras_changed"]:
+        return True, "изменились доп. адреса", []
     return True, "без изменений", []
 
 

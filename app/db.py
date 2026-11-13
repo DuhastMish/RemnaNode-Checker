@@ -42,18 +42,22 @@ CREATE TABLE IF NOT EXISTS source_nodes (
     is_active     INTEGER DEFAULT 1,
     node_id       TEXT NOT NULL,              -- цель проверки
     is_primary    INTEGER DEFAULT 1,          -- адрес цели берётся у основной ноды
+    ips           TEXT DEFAULT '[]',          -- Remnawave: доп. адреса VPS, JSON [{"ip", "status"}]
     last_seen_at  INTEGER,
     UNIQUE (source_id, external_id)
 );
 CREATE INDEX IF NOT EXISTS idx_sn_node ON source_nodes(node_id);
 
--- цель проверки: то, что проверяют чекеры
+-- цель проверки: то, что проверяют чекеры.
+-- parent_id NULL — основная цель (адрес основной ноды источника); иначе доп. адрес VPS этой основной цели
 CREATE TABLE IF NOT EXISTS nodes (
     id          TEXT PRIMARY KEY,             -- UUID
     address     TEXT NOT NULL DEFAULT '',
     fresh_port  INTEGER,
     is_active   INTEGER DEFAULT 1,
     rev         INTEGER NOT NULL DEFAULT 1,
+    parent_id   TEXT,                         -- доп. адрес: id основной цели
+    ip_status   TEXT DEFAULT '',              -- доп. адрес: метка из Remnawave (BLOCKED, RESERVE…), только для показа
     created_at  INTEGER NOT NULL,
     updated_at  INTEGER NOT NULL
 );
@@ -147,7 +151,8 @@ CREATE TABLE IF NOT EXISTS incidents (
     opened_at        INTEGER NOT NULL,
     closed_at        INTEGER,
     address_at_open  TEXT,
-    color            TEXT
+    color            TEXT,
+    extra_announced  TEXT DEFAULT '[]'        -- доп. адреса, о которых уже был алерт [ADDR UP] (JSON)
 );
 CREATE INDEX IF NOT EXISTS idx_incidents_node ON incidents(node_id, id);
 
@@ -241,9 +246,14 @@ def init():
         ("checkers", "geo", "TEXT DEFAULT ''"),
         ("checkers", "geo_country", "TEXT DEFAULT ''"),
         ("checkers", "valid_since", "INTEGER"),
+        ("nodes", "parent_id", "TEXT"),
+        ("nodes", "ip_status", "TEXT DEFAULT ''"),
+        ("source_nodes", "ips", "TEXT DEFAULT '[]'"),
+        ("incidents", "extra_announced", "TEXT DEFAULT '[]'"),
     ):
         if col not in {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:
             c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id)")
     cols = {r[1] for r in c.execute("PRAGMA table_info(sources)")}
     if "alert_url" not in cols:
         # раньше вебхук был один на всю панель (настройки alert_webhook_*) — переносим его во все источники,
