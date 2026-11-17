@@ -379,6 +379,23 @@ def active_alerts(source_id=None):
     return out
 
 
+def public_alerts(source_id=None):
+    """«Активные оповещения» для status-страницы: те же записи, что в админке, без админских деталей.
+
+    Убираем хорошие новости (это подсказка админу), подсказки про доп. адреса, имена чекеров и ссылки
+    (страницы нод и чекеров публике закрыты).
+    """
+    out = []
+    for a in active_alerts(source_id):
+        if a.get("positive"):
+            continue
+        lines = [ln for ln in a["lines"] if not isinstance(ln, dict)]
+        if a["kind"] == "checker":
+            lines = lines[:1]
+        out.append({**a, "lines": lines, "href": None})
+    return out
+
+
 def counts(rows):
     c = {k: 0 for k in COLORS}
     for r in rows:

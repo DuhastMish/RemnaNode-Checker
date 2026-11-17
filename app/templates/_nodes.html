@@ -4,6 +4,35 @@
 <span class="pulse {{ color }}"></span>
 {%- endmacro %}
 
+{# «Активные оповещения»: записи из views.active_alerts / views.public_alerts; без href — не ссылка #}
+{% macro alerts_block(alerts) %}
+<section class="card alerts">
+  {% set problems = alerts|rejectattr('positive')|list %}
+  {% set good = alerts|selectattr('positive')|list %}
+  <h2>Активные оповещения
+    {%- if problems %} <span class="count">{{ problems|length }}</span>{% endif %}
+    {%- if good %} <span class="count good" title="можно вернуть в работу">{{ good|length }}</span>{% endif %}</h2>
+  {% if not problems %}
+  <div class="allok">{{ pulse('green') }} Всё работает — открытых инцидентов нет</div>
+  {% endif %}
+  {% for a in problems + good %}
+  {% set tag = 'a' if a.href else 'div' %}
+  <{{ tag }} class="alert {{ a.color }}"{% if a.href %} href="{{ a.href }}"{% endif %}>
+    {{ pulse(a.color) }}
+    <span class="what">
+      <span>{% if a.country %}<span class="flag" title="{{ a.country }}">{{ a.country|flag }}</span>{% endif %}<b>{{ a.title }}</b>{% if a.sources %} <span class="muted">· {{ a.sources }}</span>{% endif %}</span>
+      <span class="muted">{% if a.address %}<code>{{ a.address }}</code> · {% endif %}{{ a.lines[0] }}</span>
+      {%- for line in a.lines[1:] %}
+      {%- if line is mapping %}<span class="{{ line.cls }}">{{ line.text }}</span>
+      {%- else %}<span class="muted">{{ line }}</span>{% endif %}
+      {%- endfor %}
+    </span>
+    <span class="since" title="{{ a.since|dt }}">{% if a.since %}{{ a.since|duration }}{% endif %}</span>
+  </{{ tag }}>
+  {% endfor %}
+</section>
+{% endmacro %}
+
 {% macro stats_block(st, checkers=None) %}
 <section class="stats">
   <div class="stat"><div class="num">{{ st.total }}</div><div class="lbl">Всего нод</div></div>

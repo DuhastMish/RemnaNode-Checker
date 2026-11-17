@@ -51,6 +51,7 @@ def index(request: Request):
         source_id=source_id,
         rows=_public(rows),
         stats=views.stats(rows),
+        alerts=views.public_alerts(source_id) if source_id is not None else [],
         tabs=tabs,
         title="Статус",
     )
