@@ -1,7 +1,8 @@
 """Приём результатов чекеров и состояние нод.
 
 Результат одного чекера: green / yellow / red. Негативный — всё, что не green.
-Чекер считает ноду упавшей после двух негативных подряд (fail_streak >= 2), один green сбрасывает счётчик.
+Чекер считает ноду упавшей после down_fail_streak негативных подряд (настройка, по умолчанию 2), один green
+сбрасывает счётчик.
 Защита от разовых сбоев — только для адреса, который этот чекер уже видел живым (seen_alive: SSH прошёл,
 green или yellow). Пока не видел — упавшей считается с первого же негативного результата.
 Агрегат (цвет плитки) по живым (online) чекерам со свежим результатом:
@@ -36,7 +37,6 @@ import time
 
 from . import alerts, checkers, db, settings
 
-FAIL_THRESHOLD = 2
 DOWN_COLORS = ("orange", "red")
 COLOR_TEXT = {"green": "работает", "orange": "недоступна у части чекеров", "red": "недоступна у всех чекеров"}
 _lock = threading.RLock()
@@ -134,6 +134,7 @@ def aggregate(node_id, online=None, now=None):
     now = now or time.time()
     online = set(checkers.online_ids() if online is None else online)
     fresh = _fresh_after(now)
+    threshold = max(1, settings.get("down_fail_streak"))
     up = down = 0
     last_ts = None
     oks, since = [], []
@@ -143,7 +144,7 @@ def aggregate(node_id, online=None, now=None):
             continue
         oks.append(r["ok_streak"] or 0)
         since.append(r["ok_since"])
-        if r["fail_streak"] >= (FAIL_THRESHOLD if r["seen_alive"] else 1):
+        if r["fail_streak"] >= (threshold if r["seen_alive"] else 1):
             down += 1
         else:
             up += 1
