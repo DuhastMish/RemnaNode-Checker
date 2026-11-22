@@ -14,6 +14,14 @@
 
 {{ alerts_block(alerts) }}
 
+{% if traffic_warning %}
+<div class="alert orange" style="margin:0 0 18px">
+  {{ pulse('orange') }}
+  <span class="what" style="white-space:normal"><b>Скорость нод недоступна</b>
+    <span class="muted" style="white-space:normal">{{ traffic_warning }}. <a href="/sources">Источники</a></span></span>
+</div>
+{% endif %}
+
 {% if not source %}
 <p class="muted">Источников пока нет. Добавь панель Remnawave или Open60 на странице <a href="/sources">Источники</a>.</p>
 {% else %}

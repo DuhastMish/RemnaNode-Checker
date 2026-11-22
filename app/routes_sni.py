@@ -1,8 +1,9 @@
-"""Дашборд SNI-доменов хостов (admin и status-режим): плитки, полоса истории, uptime. Без алертов."""
+"""Дашборд доменов хостов (SNI и «Адрес»), admin и status-режим: вкладки по источникам Remnawave, плитки,
+полоса истории, uptime. Без алертов. Состояние домена общее; вкладка показывает домены хостов своего источника."""
 
 from urllib.parse import quote
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 
 from . import auth, sni, views
@@ -21,6 +22,7 @@ def _unicode(domain):
 
 
 def rows():
+    """Все домены с состоянием и историей; хосты — по всем источникам (вкладку выбирает for_source)."""
     start, step = views.history_window()
     by_id: dict = {}
     for r in sni.results_since(start):
@@ -29,26 +31,50 @@ def rows():
     out = []
     for d in sni.domains():
         s = st.get(d["id"]) or {"color": "grey", "up": 0, "down": 0, "checked_at": None, "status": ""}
-        probe = s["color"]
-        color = probe if d["is_active"] else "grey"
         hist = views.summarize(by_id[d["id"]], start, step) if d["id"] in by_id else views.EMPTY_HISTORY
-        remarks = list(dict.fromkeys(h["remark"] or "без названия" for h in d["hosts"]))
         out.append(
             {
                 **d,
                 **hist,
-                "color": color,
-                "probe_color": probe,
+                "probe_color": s["color"],
                 "up": s["up"],
                 "down": s["down"],
                 "checked_at": s["checked_at"],
                 "status": s["status"],
-                "remarks": remarks,
                 "display": _unicode(d["domain"]),
-                "sources": list(dict.fromkeys(h["source"] for h in d["hosts"])),
-                "view": "inactive" if not d["is_active"] else views.view_state({"color": color}),
             }
         )
+    return out
+
+
+def for_source(all_rows, source_id):
+    """Домены вкладки: те, что есть у хостов этого источника. Активность, хосты и поля — по нему же."""
+    out = []
+    for r in all_rows:
+        hosts = [h for h in r["hosts"] if h.get("source_id") == source_id]
+        if not hosts:
+            continue
+        active = any(not h.get("disabled") for h in hosts)
+        color = r["probe_color"] if active else "grey"
+        fields = {h.get("field") or "sni" for h in hosts}
+        out.append(
+            {
+                **r,
+                "is_active": active,
+                "color": color,
+                "fields": [sni.FIELD_LABEL[f] for f in sni.FIELDS if f in fields],
+                "remarks": list(dict.fromkeys(h["remark"] or "без названия" for h in hosts)),
+                "view": "inactive" if not active else views.view_state({"color": color}),
+            }
+        )
+    return out
+
+
+def tabs(all_rows):
+    out = []
+    for s in sni.remnawave_sources():
+        counts = views.counts(for_source(all_rows, s["id"]))
+        out.append({"key": s["id"], "label": s["name"], "counts": counts})
     return out
 
 
@@ -61,15 +87,23 @@ def sni_page(request: Request):
         auth.require_status(request)
         if not sni.enabled():
             return RedirectResponse("/", status_code=303)
-    data = rows()
+    all_rows = rows()
+    tab_list = tabs(all_rows)
+    source_id = views.current_tab(request, tab_list)
+    data = for_source(all_rows, source_id) if source_id is not None else []
+    last = sni.last_sync
     return views.render(
         request,
         "sni.html",
         rows=data,
+        tabs=tab_list,
+        source_id=source_id,
         stats=views.stats(data),
         checkers=views.checker_stats() if admin else None,
         enabled=sni.enabled(),
-        last_sync=sni.last_sync,
+        last_sync=last,
+        no_access=[n for n in last.get("no_access", []) if n["source_id"] == source_id],
+        invalid=[i for i in last.get("invalid", []) if source_id in i["source_ids"]],
         admin=admin,
         LABEL=LABEL,
         no_access_hint=sni.NO_ACCESS_HINT,
@@ -78,8 +112,9 @@ def sni_page(request: Request):
 
 
 @router.post("/sni/sync")
-def sni_sync(request: Request):
+def sni_sync(request: Request, source_id: str = Form("")):
     auth.require_admin(request)
+    back = f"/sni?source={quote(source_id)}&" if source_id.isdigit() else "/sni?"
     if not sni.enabled():
-        return RedirectResponse("/sni?msg=Проверка SNI выключена в настройках", status_code=303)
-    return RedirectResponse(f"/sni?msg={quote('Сбор SNI-доменов: ' + sni.sync_all())}", status_code=303)
+        return RedirectResponse(back + "msg=" + quote("Проверка SNI выключена в настройках"), status_code=303)
+    return RedirectResponse(back + "msg=" + quote("Сбор доменов: " + sni.sync_all()), status_code=303)

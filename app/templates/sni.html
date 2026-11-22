@@ -4,21 +4,35 @@
 
 {% if not enabled %}
 <div class="card">
-  <h2>Проверка SNI-доменов выключена</h2>
-  <p class="muted" style="margin:0">Включи «Проверять SNI-домены хостов» в <a href="/settings#sni">Настройках</a>:
-    панель соберёт поле SNI у хостов всех источников Remnawave, чекеры будут проверять <code>GET https://домен/</code> → 200.</p>
+  <h2>Проверка доменов хостов выключена</h2>
+  <p class="muted" style="margin:0">Включи «Проверять домены хостов (SNI и адрес)» в <a href="/settings#sni">Настройках</a>:
+    панель соберёт домены из полей SNI и «Адрес» у хостов источников Remnawave, чекеры будут проверять
+    <code>GET https://домен/</code> → 200.</p>
 </div>
 {% endif %}
 
-{% if enabled or rows %}
-<h2 class="section">SNI-домены хостов
+{% if tabs %}
+<div class="tabs">
+  {% for t in tabs %}
+  <a href="/sni?source={{ t.key }}" class="{{ 'active' if t.key == source_id }}">
+    {{ t.label }} <span class="muted">{{ t.counts.total }}</span>
+    {% if t.counts.orange or t.counts.red %}<span class="dot red"></span>{{ t.counts.orange + t.counts.red }}{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if not tabs %}
+<p class="muted">Источников Remnawave нет{% if admin %} — добавь на странице <a href="/sources">Источники</a>{% endif %}.</p>
+{% elif enabled or rows %}
+<h2 class="section">Домены хостов
   {% if admin and last_sync.ts %}<span class="muted sync">сбор {{ last_sync.ts|ago }}: <span class="{{ 'ok' if last_sync.ok else 'bad' }}">{{ last_sync.msg }}</span></span>{% endif %}
 </h2>
-{% if admin and last_sync.no_access %}
+{% if admin and no_access %}
 <div class="card">
   <h2>Нет прав на хосты</h2>
-  {% for n in last_sync.no_access %}
-  <p style="margin:0 0 6px">{{ pulse('orange') }} <b>{{ n.source }}</b> (HTTP {{ n.code }}): {{ no_access_hint }}.
+  {% for n in no_access %}
+  <p style="margin:0">{{ pulse('orange') }} <b>{{ n.source }}</b> (HTTP {{ n.code }}): {{ no_access_hint }}.
     <a href="/sources">Источники</a></p>
   {% endfor %}
 </div>
@@ -28,12 +42,13 @@
 {% call toolbar() %}
   {% if admin and enabled %}
   <form method="post" action="/sni/sync" class="inline">
+    <input type="hidden" name="source_id" value="{{ source_id }}">
     <button type="submit" class="secondary">Собрать домены</button>
   </form>
   {% endif %}
 {% endcall %}
 
-{% if not rows %}<p class="muted">Доменов пока нет: у хостов Remnawave не заполнено поле SNI или сбор ещё не прошёл.</p>{% endif %}
+{% if not rows %}<p class="muted">Доменов пока нет: у хостов этого источника в полях SNI и «Адрес» нет доменов, или сбор ещё не прошёл.</p>{% endif %}
 <div class="ngrid">
 {% for r in rows %}
 {% set dot = r.color %}
@@ -41,12 +56,13 @@
   <div class="top">
     {{ pulse(dot) }}
     <span class="name" title="{{ r.domain }}">{{ r.display }}</span>
+    {% for f in r.fields %}<span class="badge" title="поле хоста, из которого взят домен">{{ f }}</span>{% endfor %}
     <span class="meta">
       {% if r.latency is not none %}<span class="lat">{{ r.latency }} мс</span>{% endif %}
       {% if r.uptime is not none %}<span class="up {{ 'ok' if r.uptime >= 99 else ('warn' if r.uptime >= 90 else 'bad') }}">{{ r.uptime }}%</span>{% endif %}
     </span>
   </div>
-  <div class="sub" title="{{ r.remarks|join(', ') }}">хосты: {{ r.remarks|join(', ') }}{% if admin and r.sources|length > 1 %} · {{ r.sources|join(', ') }}{% endif %}</div>
+  <div class="sub" title="{{ r.remarks|join(', ') }}">хосты: {{ r.remarks|join(', ') }}</div>
   {{ bars(r) }}
   <div class="foot">
     <span>
@@ -55,7 +71,7 @@
     {%- else -%}
       {{ LABEL[r.color] }}{% if r.up + r.down %} · {{ r.up }} из {{ r.up + r.down }}{% endif %}
     {%- endif -%}
-    {%- if r.status and r.color != 'green' %} · {{ r.status }}{% endif -%}
+    {%- if r.status and r.probe_color != 'green' %} · {{ r.status }}{% endif -%}
     </span>
     <span>{{ r.checked_at|ago if r.checked_at else '' }}</span>
   </div>
@@ -69,13 +85,13 @@
   <i class="red"></i>никто <i></i>нет данных
 </p>
 
-{% if admin and last_sync.invalid %}
+{% if admin and invalid %}
 <div class="card" style="margin-top:18px">
-  <h2>Некорректные SNI — не проверяются</h2>
+  <h2>Некорректные значения — не проверяются</h2>
   <table>
-    <tr><th>Значение</th><th>Причина</th><th>Хосты</th></tr>
-    {% for i in last_sync.invalid %}
-    <tr><td><code>{{ i.value }}</code></td><td class="muted">{{ i.reason }}</td><td>{{ i.hosts|join(', ') }}</td></tr>
+    <tr><th>Значение</th><th>Поле</th><th>Причина</th><th>Хосты</th></tr>
+    {% for i in invalid %}
+    <tr><td><code>{{ i.value }}</code></td><td>{{ 'SNI' if i.field == 'sni' else 'адрес' }}</td><td class="muted">{{ i.reason }}</td><td>{{ i.hosts|join(', ') }}</td></tr>
     {% endfor %}
   </table>
 </div>

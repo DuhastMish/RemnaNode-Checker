@@ -1,10 +1,13 @@
-"""SNI-домены хостов Remnawave: доступны ли они из сетей чекеров (GET https://домен/ → 200).
+"""Домены хостов Remnawave (поля SNI и «Адрес»): доступны ли они из сетей чекеров (GET https://домен/ → 200).
 
 Включается настройкой sni_check_enabled. Панель забирает GET {url}/api/hosts у каждого источника Remnawave,
-берёт поле sni (несколько значений через запятую/пробел — каждое отдельно), отбрасывает всё, что не является
-корректным доменным именем (IP, wildcard, порт, схема, путь, недопустимые символы), и сводит домены без
-повторов в sni_domains. Домен неактивен, если все хосты с ним отключены (isDisabled) — проверяется всё равно,
-но плитка серая.
+берёт поля sni и address (несколько значений через запятую/пробел — каждое отдельно), отбрасывает всё, что не
+является корректным доменным именем (wildcard, порт, схема, путь, недопустимые символы), и сводит домены без
+повторов в sni_domains; у каждой связи хост → домен помечено поле (field: sni | address). IP в «Адресе» — обычное
+дело, такие значения пропускаются молча; IP в SNI попадает в список некорректных.
+Домен неактивен, если все хосты с ним отключены (isDisabled) — проверяется всё равно, но плитка серая.
+Дашборд разбит на вкладки по источникам: домен общий (одна проверка), а хосты, поля и активность на вкладке —
+только этого источника.
 
 Ключ источника может не иметь прав на хосты (в Remnawave у API-ключа свои зоны/scopes; без зоны хостов —
 HTTP 403). Это не ошибка: ноды источника синхронизируются как обычно, а здесь показывается подсказка выпустить
@@ -78,6 +81,19 @@ def normalize(value):
     return v, None
 
 
+FIELDS = ("sni", "address")  # поля хоста Remnawave, из которых берутся домены
+FIELD_LABEL = {"sni": "SNI", "address": "адрес"}
+
+
+def _is_ip(value):
+    v = value.strip().strip("[]")
+    try:
+        ipaddress.ip_address(v)
+        return True
+    except ValueError:
+        return False
+
+
 def _split(raw):
     return [p for p in re.split(r"[,\s]+", str(raw or "")) if p]
 
@@ -97,8 +113,8 @@ def sync_all():
     """Собрать SNI-домены хостов всех источников Remnawave. Выключено — ничего не делает."""
     if not enabled():
         return "выключено"
-    want: dict = {}  # домен → [{source_id, source, remark, disabled}]
-    invalid: dict = {}  # значение → (причина, [подписи хостов])
+    want: dict = {}  # домен → [{source_id, source, remark, field, disabled}]
+    invalid: dict = {}  # (значение, поле) → {причина, подписи хостов, source_ids}
     failed, parts, no_access, total_hosts = set(), [], [], 0
     for src in db.q("SELECT * FROM sources WHERE type='remnawave' ORDER BY id"):
         try:
@@ -117,20 +133,27 @@ def sync_all():
             continue
         total_hosts += len(hosts)
         for h in hosts:
-            label = f"{h.get('remark') or h.get('uuid') or '?'} ({src['name']})"
-            for raw in _split(h.get("sni")):
-                domain, reason = normalize(raw)
-                if not domain:
-                    invalid.setdefault(raw[:120], (reason, []))[1].append(label)
-                    continue
-                want.setdefault(domain, []).append(
-                    {
-                        "source_id": src["id"],
-                        "source": src["name"],
-                        "remark": str(h.get("remark") or "")[:100],
-                        "disabled": bool(h.get("isDisabled")),
-                    }
-                )
+            label = str(h.get("remark") or h.get("uuid") or "?")[:100]
+            for field in FIELDS:
+                for raw in _split(h.get(field)):
+                    domain, reason = normalize(raw)
+                    if not domain:
+                        if field == "address" and _is_ip(raw):
+                            continue  # хост на IP — проверять нечего, это не ошибка
+                        bad = invalid.setdefault((raw[:120], field), {"reason": reason, "hosts": [], "source_ids": []})
+                        bad["hosts"].append(f"{label} ({src['name']})")
+                        if src["id"] not in bad["source_ids"]:
+                            bad["source_ids"].append(src["id"])
+                        continue
+                    want.setdefault(domain, []).append(
+                        {
+                            "source_id": src["id"],
+                            "source": src["name"],
+                            "remark": str(h.get("remark") or "")[:100],
+                            "field": field,
+                            "disabled": bool(h.get("isDisabled")),
+                        }
+                    )
     now = int(time.time())
     with _lock:
         have = {r["domain"]: dict(r) for r in db.q("SELECT * FROM sni_domains")}
@@ -164,7 +187,7 @@ def sync_all():
             db.kv_set("sni_revision", revision() + 1)
     msg = f"{len(want)} доменов из {total_hosts} хостов"
     if invalid:
-        msg += f", некорректных SNI: {len(invalid)}"
+        msg += f", некорректных значений: {len(invalid)}"
     if no_access:
         msg += "; нет прав на хосты у ключа: " + ", ".join(n["source"] for n in no_access)
     if parts:
@@ -174,9 +197,13 @@ def sync_all():
         ok=not parts,
         msg=msg,
         no_access=no_access,
-        invalid=[{"value": v, "reason": r, "hosts": hs} for v, (r, hs) in sorted(invalid.items())],
+        invalid=[{"value": v, "field": f, **x} for (v, f), x in sorted(invalid.items())],
     )
     return msg
+
+
+def remnawave_sources():
+    return [dict(r) for r in db.q("SELECT id, name FROM sources WHERE type='remnawave' ORDER BY id")]
 
 
 def for_agent():

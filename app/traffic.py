@@ -26,6 +26,13 @@ RESTORE_PCT = 70
 KEEP_SEC = 2 * 86400
 
 last_poll = {"ts": None, "msg": ""}
+# source_id → {"ok", "code", "ts"} последнего опроса: хватает ли ключу прав, чтобы читать скорость нод
+access: dict = {}
+
+NO_STATS_HINT = (
+    "ключ источника не даёт читать скорость нод — проверка «обрыв трафика» для этого источника не работает. "
+    "Выпусти в Remnawave новый API-ключ с доступом к нодам и их статистике и укажи его в источнике"
+)
 
 
 # ---------- опрос ----------
@@ -54,10 +61,12 @@ def poll():
             items = sources._get_json(f"{base}/api/nodes", src["token"]).get("response", [])
         except urllib.error.HTTPError as e:
             parts.append(f"{src['name']}: HTTP {e.code}")
+            if e.code in (401, 403):
+                access[src["id"]] = {"ok": False, "code": e.code, "ts": now}
             continue
         except Exception as e:
             parts.append(f"{src['name']}: {str(e)[:80]}")
-            continue
+            continue  # сеть/панель недоступна — о правах ключа это ничего не говорит
         sn_by_ext = {
             r["external_id"]: r
             for r in db.q(
@@ -79,8 +88,21 @@ def poll():
             )
             got += 1
             evaluate(sn["id"], bool(sn["is_active"]), now, node_red=sn["color"] == "red")
+        # ноды есть и подключены, но счётчиков интерфейса нет ни у одной — ключу не отдают статистику
+        connected = [n for n in items if isinstance(n, dict) and n.get("isConnected") and not n.get("isDisabled")]
+        access[src["id"]] = {"ok": bool(got or not connected), "code": None, "ts": now}
         parts.append(f"{src['name']}: {got} нод")
     last_poll.update(ts=now, msg="; ".join(parts) or "источников Remnawave нет")
+
+
+def access_warning(source_id):
+    """Текст предупреждения для вкладки источника или None: прав хватает, проверка выключена, ещё не опрашивали."""
+    st = access.get(source_id)
+    if not st or st["ok"] or settings.get("traffic_drop_pct") <= 0:
+        return None
+    return (
+        f"HTTP {st['code']}: " if st["code"] else "нет данных о трафике ни у одной подключённой ноды: "
+    ) + NO_STATS_HINT
 
 
 # ---------- скорость ----------

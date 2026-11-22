@@ -59,6 +59,7 @@ def index(request: Request):
         stats=views.stats(rows),
         checkers=views.checker_stats(),
         alerts=views.active_alerts(source_id),
+        traffic_warning=traffic.access_warning(source_id) if source_id else None,
         tabs=tabs,
         title="Ноды",
     )
