@@ -174,6 +174,38 @@ CREATE TABLE IF NOT EXISTS job_checkers (
     PRIMARY KEY (job_id, checker_id)
 );
 
+-- SNI-домены хостов Remnawave (sni.py): проверка GET https://домен/ → 200, без инцидентов и алертов
+CREATE TABLE IF NOT EXISTS sni_domains (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain      TEXT NOT NULL UNIQUE,         -- нормализован: нижний регистр, punycode
+    is_active   INTEGER NOT NULL DEFAULT 1,   -- 0: все хосты с этим SNI отключены
+    hosts       TEXT NOT NULL DEFAULT '[]',   -- JSON [{source_id, source, remark, disabled}]
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sni_checker_state (
+    sni_id       INTEGER NOT NULL,
+    checker_id   TEXT NOT NULL,
+    last_state   TEXT,                        -- green | red
+    last_status  TEXT DEFAULT '',             -- HTTP 200, TIMEOUT, TLS …
+    fail_streak  INTEGER NOT NULL DEFAULT 0,
+    seen_ok      INTEGER NOT NULL DEFAULT 0,  -- чекер хоть раз получил 200
+    last_ts      INTEGER,
+    PRIMARY KEY (sni_id, checker_id)
+);
+CREATE TABLE IF NOT EXISTS sni_results (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    result_uid   TEXT UNIQUE,
+    sni_id       INTEGER NOT NULL,
+    checker_id   TEXT NOT NULL,
+    ts           INTEGER NOT NULL,
+    http_status  INTEGER,
+    status       TEXT,
+    latency_ms   INTEGER,
+    state        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sni_results ON sni_results(sni_id, ts);
+
 CREATE TABLE IF NOT EXISTS kv (
     key    TEXT PRIMARY KEY,
     value  TEXT

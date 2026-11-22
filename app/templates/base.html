@@ -129,12 +129,14 @@ a.ncard:hover{border-color:#3a4150}
   {% if mode == 'admin' %}
     <a href="/" class="{{ 'active' if title == 'Ноды' }}">Ноды</a>
     <a href="/sources" class="{{ 'active' if title == 'Источники' }}">Источники</a>
+    <a href="/sni" class="{{ 'active' if title == 'SNI' }}">SNI</a>
     <a href="/checkers" class="{{ 'active' if title == 'Чекеры' }}">Чекеры</a>
     <a href="/terminal" class="{{ 'active' if title == 'Терминал' }}">Терминал</a>
     <a href="/settings" class="{{ 'active' if title == 'Настройки' }}">Настройки</a>
   {% else %}
     <a href="/" class="{{ 'active' if title == 'Статус' }}">Статус</a>
     <a href="/check" class="{{ 'active' if title == 'Проверить' }}">Проверить</a>
+    {% if sni_enabled %}<a href="/sni" class="{{ 'active' if title == 'SNI' }}">SNI</a>{% endif %}
   {% endif %}
   </nav>
   <span class="right"><a href="/logout">выйти</a></span>

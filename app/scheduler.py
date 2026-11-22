@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import db, egress, export, geoip, jobs, settings, sources, state, traffic, tunnel
+from . import db, egress, export, geoip, jobs, settings, sni, sources, state, traffic, tunnel
 
 sched = BackgroundScheduler(
     timezone="UTC",
@@ -28,6 +28,7 @@ def sync_nodes():
 def cleanup():
     cutoff = int(time.time()) - settings.get("retention_days") * 86400
     db.x("DELETE FROM results WHERE ts < ?", (cutoff,))
+    sni.cleanup(cutoff)
     old = int(time.time()) - 7 * 86400
     db.x(
         "DELETE FROM job_checkers WHERE job_id IN (SELECT id FROM jobs WHERE status='done' AND finished_at < ?)", (old,)
@@ -38,6 +39,7 @@ def cleanup():
 
 TASKS = {
     "sync_nodes": ("Синхронизация нод из источников", sync_nodes),
+    "sni_sync": ("SNI-домены хостов Remnawave (если включено)", sni.sync_all),
     "cleanup": ("Очистка истории", cleanup),
     "recompute_state": ("Пересчёт состояния нод (offline-чекеры, устаревание)", state.recompute_all),
     "finish_jobs": ("Завершение ручных заданий по таймауту", jobs.finish_due),
@@ -64,6 +66,7 @@ def _wrap(name, fn):
 def _triggers():
     return {
         "sync_nodes": IntervalTrigger(minutes=max(1, settings.get("sync_interval_min"))),
+        "sni_sync": IntervalTrigger(minutes=max(1, settings.get("sync_interval_min"))),
         "cleanup": IntervalTrigger(days=1),
         "recompute_state": IntervalTrigger(seconds=30),
         "finish_jobs": IntervalTrigger(seconds=5),
@@ -79,6 +82,7 @@ def setup():
     now = datetime.now(timezone.utc)
     first = {
         "sync_nodes": 5,
+        "sni_sync": 10,
         "cleanup": 60,
         "recompute_state": 30,
         "finish_jobs": 5,

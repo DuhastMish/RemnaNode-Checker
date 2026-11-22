@@ -11,7 +11,7 @@ import json
 
 from fastapi import APIRouter, HTTPException, Request
 
-from . import auth, checkers, db, jobs, nodes, settings, state
+from . import auth, checkers, db, jobs, nodes, settings, sni, state
 
 router = APIRouter(prefix="/api/v1/agent")
 
@@ -131,3 +131,50 @@ async def job_ack(request: Request, job_id: int):
     if not jobs.ack(job_id, ch["id"], data.get("status")):
         raise HTTPException(404, "job not assigned to this checker")
     return {"ok": True}
+
+
+# ---------- SNI-домены (с агента 2.4.0) ----------
+# Отдельные эндпоинты: существующий контракт (hello/heartbeat/config/nodes/results) не меняется, старые
+# чекеры о SNI не знают и работают как раньше. Новый чекер сам запрашивает /sni перед каждой плановой
+# проверкой; у старой панели /sni нет (404) — чекер SNI не проверяет.
+
+
+@router.get("/sni")
+def sni_list(request: Request):
+    _checker(request)
+    if not sni.enabled():
+        return {"enabled": False, "revision": sni.revision(), "timeout_sec": 0, "domains": []}
+    return {
+        "enabled": True,
+        "revision": sni.revision(),
+        "timeout_sec": settings.get("sni_timeout_sec"),
+        "domains": sni.for_agent(),
+    }
+
+
+def _acceptable(ch, items):
+    """SNI-результаты, которые можно учесть (те же правила, что в /results): (items, ignored).
+
+    items=None — чекер вне своей страны (VPN); после возврата принимается только снятое после возврата."""
+    items = [i for i in items if isinstance(i, dict)]
+    if checkers.blocked(ch):
+        return None, len(items)
+    since = ch["valid_since"] or 0
+    fresh = [i for i in items if not (isinstance(i.get("ts"), int) and i["ts"] < since)]
+    return fresh, len(items) - len(fresh)
+
+
+@router.post("/sni/results")
+async def sni_results(request: Request):
+    """{results: [{result_uid, sni_id, domain, ts, ok, http_status, status, latency_ms}]}"""
+    ch = _checker(request)
+    data = await _body(request)
+    items = data.get("results")
+    if not isinstance(items, list) or len(items) > 5000:
+        raise HTTPException(400, "results: list expected (<= 5000)")
+    checkers.touch(ch["id"])
+    items, ignored = _acceptable(ch, items)
+    if items is None:
+        return {"accepted": 0, "duplicates": 0, "unknown": 0, "ignored": ignored, "reason": "checker country"}
+    accepted, dupes, unknown = sni.ingest(ch["id"], items)
+    return {"accepted": accepted, "duplicates": dupes, "unknown": unknown, "ignored": ignored}

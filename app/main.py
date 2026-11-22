@@ -14,6 +14,7 @@ from . import (
     routes_agent,
     routes_checkers,
     routes_settings,
+    routes_sni,
     routes_sources,
     scheduler,
     settings,
@@ -51,5 +52,6 @@ app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__
 app.include_router(routes_admin.router)
 app.include_router(routes_settings.router)
 app.include_router(routes_sources.router)
+app.include_router(routes_sni.router)
 app.include_router(routes_checkers.router)
 app.include_router(routes_agent.router)

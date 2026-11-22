@@ -60,6 +60,11 @@
   {% if sid == 'scheduler' and last_sync.ts %}
     <p class="muted">Последняя синхронизация {{ last_sync.ts|ago }}: {{ last_sync.msg }}</p>
   {% endif %}
+  {% if sid == 'sni' %}
+    <p class="muted">Дашборд — <a href="/sni">SNI</a>.{% if sni_sync.ts %} Последний сбор доменов {{ sni_sync.ts|ago }}:
+      <span class="{{ 'ok' if sni_sync.ok else 'bad' }}">{{ sni_sync.msg }}</span>{% endif %}</p>
+    {% for n in sni_sync.no_access %}<p class="warn" style="color:var(--orange)">{{ n.source }}: {{ sni_hint }}</p>{% endfor %}
+  {% endif %}
   {% if sid == 'checks' %}
     <p class="muted">Эти параметры чекеры получают от панели и применяют без перезапуска.</p>
   {% endif %}

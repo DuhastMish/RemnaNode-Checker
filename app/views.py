@@ -91,6 +91,7 @@ templates.env.globals.update(COLORS=COLORS, COLOR_LABEL=COLOR_LABEL)
 
 def render(request, name, **ctx):
     ctx.setdefault("title", "nodecheck")
+    ctx.setdefault("sni_enabled", settings.get("sni_check_enabled"))
     ctx.update(request=request, mode=auth.mode(request), msg=request.query_params.get("msg"))
     return templates.TemplateResponse(request, name, ctx)
 
@@ -195,9 +196,7 @@ def history(node_ids, now=None):
     """
     if not node_ids:
         return {}
-    now = int(now or time.time())
-    step = max(1, settings.get("check_interval_min")) * 60
-    start = now - BARS * step
+    start, step = history_window(now)
     by_node = {}
     ids = list(dict.fromkeys(node_ids))
     for i in range(0, len(ids), 500):
@@ -208,21 +207,30 @@ def history(node_ids, now=None):
             (*chunk, start),
         ):
             by_node.setdefault(r["node_id"], []).append(r)
-    out = {}
-    for node_id, res in by_node.items():
-        buckets = [[] for _ in range(BARS)]
-        for r in res:
-            buckets[min(BARS - 1, max(0, (r["ts"] - start) // step))].append(r["state"])
-        lat = [r["latency_ms"] for r in res if r["latency_ms"] is not None and r["state"] == "green"]
-        out[node_id] = {
-            "bars": [
-                {"color": _bar(b), "ts": start + k * step, "n": len(b), "ok": sum(1 for s in b if s == "green")}
-                for k, b in enumerate(buckets)
-            ],
-            "uptime": _pct(sum(1 for r in res if r["state"] == "green"), len(res)),
-            "latency": round(sum(lat) / len(lat)) if lat else None,
-        }
-    return out
+    return {node_id: summarize(res, start, step) for node_id, res in by_node.items()}
+
+
+def history_window(now=None):
+    """(начало окна, шаг) полосы: BARS интервалов плановой проверки до now."""
+    now = int(now or time.time())
+    step = max(1, settings.get("check_interval_min")) * 60
+    return now - BARS * step, step
+
+
+def summarize(res, start, step):
+    """Результаты одной цели ({ts, state, latency_ms}) → {bars, uptime, latency}."""
+    buckets = [[] for _ in range(BARS)]
+    for r in res:
+        buckets[min(BARS - 1, max(0, (r["ts"] - start) // step))].append(r["state"])
+    lat = [r["latency_ms"] for r in res if r["latency_ms"] is not None and r["state"] == "green"]
+    return {
+        "bars": [
+            {"color": _bar(b), "ts": start + k * step, "n": len(b), "ok": sum(1 for s in b if s == "green")}
+            for k, b in enumerate(buckets)
+        ],
+        "uptime": _pct(sum(1 for r in res if r["state"] == "green"), len(res)),
+        "latency": round(sum(lat) / len(lat)) if lat else None,
+    }
 
 
 # ---------- «Все системы» и «Активные оповещения» ----------

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import auth, egress, scheduler, settings, tunnel, views
+from . import auth, egress, scheduler, settings, sni, tunnel, views
 
 router = APIRouter()
 
@@ -36,6 +36,8 @@ def settings_page(request: Request):
         egress_alive=egress.alive(),
         egress_error=egress.last_error,
         last_sync=scheduler.last_sync,
+        sni_sync=sni.last_sync,
+        sni_hint=sni.NO_ACCESS_HINT,
         history=settings.history(15),
     )
 
@@ -75,6 +77,8 @@ async def settings_save(request: Request):
         scheduler.apply_intervals()
     elif section == "egress":
         egress.ensure()
+    elif section == "sni" and "sni_check_enabled" in changed and sni.enabled():
+        scheduler.run_now("sni_sync")  # включили — собрать домены сразу, не ждать интервала
     elif (
         section == "tunnel"
         and tunnel.mode() == "ssh"

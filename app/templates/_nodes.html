@@ -33,9 +33,9 @@
 </section>
 {% endmacro %}
 
-{% macro stats_block(st, checkers=None) %}
+{% macro stats_block(st, checkers=None, total_label='Всего нод', latency_label='Задержка прокси') %}
 <section class="stats">
-  <div class="stat"><div class="num">{{ st.total }}</div><div class="lbl">Всего нод</div></div>
+  <div class="stat"><div class="num">{{ st.total }}</div><div class="lbl">{{ total_label }}</div></div>
   <div class="stat"><div class="num ok">{{ st.up }}</div><div class="lbl">Работают</div></div>
   <div class="stat"><div class="num {{ 'bad' if st.down else 'muted' }}">{{ st.down }}</div><div class="lbl">Упали</div></div>
   <div class="stat"><div class="num muted">{{ st.unknown + st.inactive }}</div><div class="lbl">Нет данных{% if st.inactive %} · неактивных {{ st.inactive }}{% endif %}</div></div>
@@ -43,7 +43,7 @@
   <div class="stat"><div class="num {{ 'ok' if checkers.online == checkers.total and checkers.total else 'bad' }}">{{ checkers.online }}<span class="unit">/{{ checkers.total }}</span></div><div class="lbl">Чекеры online</div></div>
   {% endif %}
   {% if st.latency is not none %}
-  <div class="stat"><div class="num">{{ st.latency }}<span class="unit">мс</span></div><div class="lbl">Задержка прокси</div></div>
+  <div class="stat"><div class="num">{{ st.latency }}<span class="unit">мс</span></div><div class="lbl">{{ latency_label }}</div></div>
   {% endif %}
 </section>
 {% endmacro %}
